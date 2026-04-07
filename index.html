@@ -10,6 +10,25 @@
 
 <div style="padding:1rem 0;">
 
+  <div style="display:flex;gap:8px;margin:0 0 1.5rem;align-items:center;">
+    <button class="preset-btn active" data-preset="likely" onclick="applyPreset('likely')">Likely / Default</button>
+    <button class="preset-btn" data-preset="bear" onclick="applyPreset('bear')">Bear / Conservative</button>
+    <button class="preset-btn" data-preset="bull" onclick="applyPreset('bull')">Bull / Optimistic</button>
+    <span class="info-icon" tabindex="0">ⓘ
+      <span class="info-tooltip">
+        <b>Bear / Conservative</b><br>
+        1 spin-out/yr · 60% survival · $3M median revenue · 6 yrs to maturity<br>
+        3% royalty · 5% Thrive equity · no anti-dilution · 5% liquidity at $20M exit<br><br>
+        <b>Likely / Default</b><br>
+        1.5 spin-outs/yr · 70% survival · $5M median revenue · 4 yrs to maturity<br>
+        5% royalty · 10% Thrive equity · Series A anti-dilution · 10% liquidity at $30M exit<br><br>
+        <b>Bull / Optimistic</b><br>
+        2 spin-outs/yr · 80% survival · $7M median revenue · 4 yrs to maturity<br>
+        7% royalty · 15% Thrive equity · Series B anti-dilution · 20% liquidity at $50M exit
+      </span>
+    </span>
+  </div>
+
   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 1.5rem;" id="metrics">
     <div class="mc"><div class="k">Annual royalty income (steady state)</div><div class="v" id="m1">—</div></div>
     <div class="mc"><div class="k">Cumulative royalty (10 yr)</div><div class="v" id="m2">—</div></div>
@@ -21,7 +40,7 @@
 
   <div class="sec">
     <div class="sec-title">Portfolio parameters</div>
-    <div class="row"><span class="lbl">Spin-outs per year</span><input type="range" min="1" max="5" step="1" value="2" id="spY" style="flex:1;"><span class="val" id="spYo">2</span></div>
+    <div class="row"><span class="lbl">Spin-outs per year</span><input type="range" min="0.5" max="5" step="0.5" value="2" id="spY" style="flex:1;"><span class="val" id="spYo">2</span></div>
     <div class="row"><span class="lbl">Years of operation</span><input type="range" min="3" max="10" step="1" value="10" id="yrs" style="flex:1;"><span class="val" id="yrso">10</span></div>
     <div class="row"><span class="lbl">Survival rate (%)</span><input type="range" min="50" max="95" step="5" value="80" id="surv" style="flex:1;"><span class="val" id="survo">80%</span></div>
     <div class="row"><span class="lbl">Yearly investment ($M)</span><input type="range" min="0.5" max="3" step="0.5" value="1" id="inv" style="flex:1;"><span class="val" id="invo">$1M/yr</span></div>
@@ -97,6 +116,12 @@
     <button onclick="sendPrompt('Draft a term sheet template for Thrive spin-outs based on this model: revenue royalty + equity hybrid')">Draft term sheet template ↗</button>
     <button onclick="sendPrompt('How should we present this model to Georgetown OTC? What are the likely objections and how do we address them?')">OTC presentation strategy ↗</button>
   </div>
+
+  <div style="font-size:14px;font-weight:500;margin:2rem 0 8px;color:var(--color-text-primary);">Scenario comparison — investment vs. royalty</div>
+  <div style="position:relative;width:100%;height:300px;margin:0 0 1rem;">
+    <canvas id="chart3"></canvas>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--color-text-secondary);margin:0 0 2rem;" id="leg3"></div>
 
 </div>
 

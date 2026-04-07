@@ -14,7 +14,122 @@ function boxMuller(i) {
 
 const ids = ['spY', 'yrs', 'surv', 'inv', 'medR', 'sig', 'matY', 'thresh', 'flatR', 'g1r', 'g2r', 'g3r', 'capR', 'capMax', 'eqT', 'eqO', 'dil', 'liq', 'exitV', 'revMult'];
 const el = k => document.getElementById(k);
-let c1, c2;
+let c1, c2, c3;
+
+const PRESETS = {
+  bear: {
+    spY:1, yrs:10, survR:60, invY:1, medR:3, sig:1.0, matY:6,
+    royMode:'flat', thresh:500, flatR:3, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
+    eqT:5, eqO:3, antiD:'none', dil:70, liq:5, exitV:20, revMult:2,
+  },
+  likely: {
+    spY:1.5, yrs:10, survR:70, invY:1, medR:5, sig:0.8, matY:4,
+    royMode:'flat', thresh:500, flatR:5, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
+    eqT:10, eqO:5, antiD:'A', dil:60, liq:10, exitV:30, revMult:3,
+  },
+  bull: {
+    spY:2, yrs:10, survR:80, invY:1, medR:7, sig:0.7, matY:4,
+    royMode:'flat', thresh:500, flatR:7, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
+    eqT:15, eqO:5, antiD:'B', dil:50, liq:20, exitV:50, revMult:5,
+  },
+};
+
+function runScenario(p) {
+  const spY = p.spY, yrs = p.yrs, survR = p.survR / 100, invY = p.invY;
+  const medR = p.medR, sigma = p.sig, matY = p.matY;
+  const mode = p.royMode, tM = p.thresh / 1000;
+  const eqT = p.eqT / 100, dilP = p.dil / 100, liqP = p.liq / 100;
+  const exitV = p.exitV, antiD = p.antiD;
+  const SAMPLE_SIZE = 200, horizonYrs = 10;
+  const totalV = spY * yrs;
+  const survivors = Math.round(totalV * survR);
+  const mu = Math.log(medR);
+
+  const sampleRevenues = [];
+  for (let i = 0; i < SAMPLE_SIZE; i++) sampleRevenues.push(Math.exp(mu + sigma * boxMuller(i)));
+
+  let sampleTotalRoy = 0;
+  sampleRevenues.forEach(r => {
+    if (r <= tM) return;
+    const eligible = r - tM;
+    if (mode === 'flat') { sampleTotalRoy += eligible * p.flatR / 100; return; }
+    if (mode === 'grad') {
+      const r1 = p.g1r / 100, r2 = p.g2r / 100, r3 = p.g3r / 100;
+      const b1 = 2 - tM, b2 = 10 - tM;
+      if (eligible <= b1) { sampleTotalRoy += eligible * r1; return; }
+      let roy = b1 * r1;
+      if (eligible <= b2) { sampleTotalRoy += roy + (eligible - b1) * r2; return; }
+      sampleTotalRoy += roy + (b2 - b1) * r2 + (eligible - b2) * r3; return;
+    }
+    sampleTotalRoy += Math.min(eligible * p.capR / 100, p.capMax);
+  });
+  const avgRoy = sampleTotalRoy / SAMPLE_SIZE;
+
+  let effEq = eqT;
+  if (antiD === 'none')   effEq = eqT * (1 - dilP);
+  else if (antiD === 'A') effEq = eqT * (1 - dilP * 0.5);
+  else                    effEq = eqT * (1 - dilP * 0.25);
+
+  const eqValue = Math.round(totalV * liqP) * exitV * effEq;
+  const cohortSurvivors = survivors / yrs;
+  const cumRoyalties = [], cumInvestment = [], equityByYear = [];
+  let cumR = 0;
+
+  for (let y = 1; y <= horizonYrs; y++) {
+    let yRoy = 0;
+    for (let c = 1; c <= Math.min(y, yrs); c++) yRoy += avgRoy * cohortSurvivors * Math.min((y - c + 1) / matY, 1);
+    cumR += yRoy;
+    const fullyMatureV = Math.min(Math.max(0, y - matY + 1), yrs) * spY;
+    const eqAtY = totalV > 0 ? eqValue * (fullyMatureV / totalV) : 0;
+    cumRoyalties.push(Math.round(cumR * 10) / 10);
+    cumInvestment.push(Math.round(Math.min(y, yrs) * invY * 10) / 10);
+    equityByYear.push(Math.round(eqAtY * 10) / 10);
+  }
+  return { cumRoyalties, cumInvestment, equityByYear };
+}
+
+function applyPreset(name) {
+  const p = PRESETS[name];
+  const setV = (id, v) => { const e = el(id); if (e) e.value = v; };
+  setV('spY', p.spY); setV('yrs', p.yrs); setV('surv', p.survR); setV('inv', p.invY);
+  setV('medR', p.medR); setV('sig', p.sig); setV('matY', p.matY);
+  setV('thresh', p.thresh); setV('flatR', p.flatR);
+  setV('g1r', p.g1r); setV('g2r', p.g2r); setV('g3r', p.g3r);
+  setV('capR', p.capR); setV('capMax', p.capMax);
+  setV('eqT', p.eqT); setV('eqO', p.eqO);
+  el('antiD').value = p.antiD;
+  setV('dil', p.dil); setV('liq', p.liq); setV('exitV', p.exitV); setV('revMult', p.revMult);
+  el('royMode').value = p.royMode;
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector('.preset-btn[data-preset="' + name + '"]');
+  if (btn) btn.classList.add('active');
+  calc();
+}
+
+function buildScenarioChart() {
+  const bear   = runScenario(PRESETS.bear);
+  const likely = runScenario(PRESETS.likely);
+  const bull   = runScenario(PRESETS.bull);
+  const labels = Array.from({ length: 10 }, (_, i) => 'Yr ' + (i + 1));
+  if (c3) c3.destroy();
+  c3 = new Chart(el('chart3'), {
+    type: 'line',
+    data: { labels, datasets: [
+      // Investment — single line, identical across scenarios ($1M/yr × 10yr)
+      { data: likely.cumInvestment, borderColor: '#E24B4A', backgroundColor: 'rgba(226,75,74,0.06)', fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+      // Royalty spread: bear lower bound, bull fills back to it, likely solid on top
+      { data: bear.cumRoyalties,   fill: false, borderColor: 'rgba(29,158,117,0.4)', borderDash: [4,4], pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
+      { data: bull.cumRoyalties,   fill: '-1',  backgroundColor: 'rgba(29,158,117,0.12)', borderColor: 'rgba(29,158,117,0.4)', borderDash: [4,4], pointRadius: 0, borderWidth: 1.5, tension: 0.3 },
+      { data: likely.cumRoyalties, fill: false, borderColor: '#1D9E75', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2 },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v + 'M' } }, x: { grid: { display: false } } } }
+  });
+  el('leg3').innerHTML = [
+    ['#E24B4A', 'Cumulative investment'],
+    ['rgba(29,158,117,0.4)', 'Royalty range (bear – bull)'],
+    ['#1D9E75', 'Cumulative royalty (likely)'],
+  ].map(([c, l]) => `<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:${c};"></span><span style="font-size:12px;color:var(--color-text-secondary);">${l}</span></span>`).join('');
+}
 
 function netCard(id, total, inv) {
   const net = total - inv;
@@ -75,7 +190,7 @@ function royaltyForVenture(rev, mode) {
 }
 
 function calc() {
-  const spY    = parseInt(el('spY').value);
+  const spY    = parseFloat(el('spY').value);
   const yrs    = parseInt(el('yrs').value);
   const survR  = parseInt(el('surv').value) / 100;
   const invY   = parseFloat(el('inv').value);   // yearly investment
@@ -94,7 +209,7 @@ function calc() {
   const revMult = parseFloat(el('revMult').value);
 
   // Update displayed values
-  el('spYo').textContent   = spY;
+  el('spYo').textContent   = spY % 1 === 0 ? spY : spY.toFixed(1);
   el('yrso').textContent   = yrs;
   el('survo').textContent  = Math.round(survR * 100) + '%';
   el('invo').textContent   = '$' + invY.toFixed(1) + 'M/yr';
@@ -254,6 +369,8 @@ function calc() {
     data: { labels: bucketLabels, datasets: [{ data: scaledBCounts, backgroundColor: '#534AB7', borderRadius: 4, barPercentage: 0.6 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, callback: v => v + ' ventures' } }, x: { grid: { display: false }, ticks: { autoSkip: false } } } }
   });
+
+  buildScenarioChart();
 }
 
 ids.forEach(id => el(id).addEventListener('input', calc));

@@ -37,6 +37,33 @@ button {
 }
 button:hover { background: var(--color-border-secondary); }
 
+.preset-btn { transition: background 0.15s, border-color 0.15s; }
+.preset-btn.active { background: #1a1a18; color: #faf9f6; border-color: #1a1a18; }
+
+.info-icon {
+  position: relative;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  cursor: default;
+  margin-left: 4px;
+}
+.info-tooltip {
+  display: none;
+  position: absolute;
+  left: 0; top: calc(100% + 6px);
+  width: 340px;
+  background: #1a1a18;
+  color: #e8e5de;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  border-radius: var(--border-radius-lg);
+  z-index: 10;
+  pointer-events: none;
+}
+.info-icon:hover .info-tooltip,
+.info-icon:focus .info-tooltip { display: block; }
+
 
 .sec { margin: 0 0 1.5rem; }
 .sec-title { font-size: 16px; font-weight: 500; margin: 0 0 12px; color: var(--color-text-primary); }
