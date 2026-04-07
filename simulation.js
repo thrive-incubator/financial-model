@@ -12,25 +12,110 @@ function boxMuller(i) {
   return Math.sqrt(-2 * Math.log(u1 + 0.001)) * Math.cos(2 * Math.PI * u2);
 }
 
-const ids = ['spY', 'yrs', 'surv', 'inv', 'medR', 'sig', 'matY', 'thresh', 'flatR', 'g1r', 'g2r', 'g3r', 'capR', 'capMax', 'eqT', 'eqO', 'dil', 'liq', 'exitV', 'revMult'];
+const ids = ['spY', 'yrs', 'surv', 'inv', 'medR', 'sig', 'matY', 'thresh', 'flatR', 'g1r', 'g2r', 'g3r', 'capR', 'capMax', 'eqT', 'eqO', 'dil', 'liq', 'exitV', 'exitMinY', 'exitMaxY', 'revMult', 'growthR'];
+
+// Returns 0→1 ramp value for a venture of given age, over matY years
+function rampFn(age, matY, mode) {
+  const t = Math.min(age / matY, 1);
+  if (mode === 'linear')  return t;
+  if (mode === 'convex')  return t * t;
+  if (mode === 'concave') return Math.sqrt(t);
+  // S-curve (logistic), k=6 gives a nice shape, normalized to pass through (0,0) and (1,1)
+  const k = 6;
+  const s0 = 1 / (1 + Math.exp(-k * (0 - 0.5)));
+  const s1 = 1 / (1 + Math.exp(-k * (1 - 0.5)));
+  return (1 / (1 + Math.exp(-k * (t - 0.5))) - s0) / (s1 - s0);
+}
 const el = k => document.getElementById(k);
-let c1, c2, c3;
+let c1, c2, c3, dc1, dc2;
+
+function openDistModal() {
+  const modal = el('distModal');
+  modal.style.display = 'flex';
+  buildDistCharts();
+}
+function closeDistModal() {
+  el('distModal').style.display = 'none';
+}
+
+function buildDistCharts() {
+  const medR  = parseFloat(el('medR').value);
+  const sigma = parseFloat(el('sig').value);
+  const matY  = parseInt(el('matY').value);
+  const mu    = Math.log(medR);
+
+  // --- Chart 1: lognormal PDF curve ---
+  // Sample 200 points across a reasonable revenue range
+  const maxX = Math.exp(mu + 3 * sigma);
+  const steps = 120;
+  const xs = [], ys = [];
+  for (let i = 1; i <= steps; i++) {
+    const x = (maxX / steps) * i;
+    const pdf = (1 / (x * sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-Math.pow(Math.log(x) - mu, 2) / (2 * sigma * sigma));
+    xs.push('$' + (x < 10 ? x.toFixed(1) : Math.round(x)) + 'M');
+    ys.push(Math.round(pdf * 10000) / 10000);
+  }
+
+  if (dc1) dc1.destroy();
+  dc1 = new Chart(el('distChart1'), {
+    type: 'line',
+    data: { labels: xs, datasets: [{ data: ys, borderColor: '#534AB7', backgroundColor: 'rgba(83,74,183,0.12)', fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: v => v[0].label, label: v => 'Density: ' + v.raw } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 6, autoSkip: true }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { display: false }, grid: { display: false } }
+      }
+    }
+  });
+
+  // --- Chart 2: revenue ramp for median venture ---
+  const rampMode  = el('rampMode').value;
+  const growthR   = parseInt(el('growthR').value) / 100;
+  const rampYears = Math.max(matY + 4, 10);
+  const rampLabels = [], rampData = [];
+  for (let y = 1; y <= rampYears; y++) {
+    rampLabels.push('Yr ' + y);
+    const r = rampFn(y, matY, rampMode);
+    const postGrowth = y > matY ? Math.pow(1 + growthR, y - matY) : 1;
+    rampData.push(Math.round(medR * r * postGrowth * 10) / 10);
+  }
+
+  if (dc2) dc2.destroy();
+  dc2 = new Chart(el('distChart2'), {
+    type: 'line',
+    data: { labels: rampLabels, datasets: [
+      { data: rampData, borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.12)', fill: true, tension: 0.3, pointRadius: 3, borderWidth: 2 },
+      // Dotted reference at maturity level
+      { data: Array(rampYears).fill(medR), borderColor: 'rgba(29,158,117,0.35)', borderDash: [4, 4], pointRadius: 0, borderWidth: 1.5, fill: false },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: v => '$' + v.raw + 'M ARR' } } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, ticks: { callback: v => '$' + v + 'M' } }
+      }
+    }
+  });
+}
 
 const PRESETS = {
   bear: {
     spY:1, yrs:10, survR:60, invY:1, medR:3, sig:1.0, matY:6,
     royMode:'flat', thresh:500, flatR:3, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
-    eqT:5, eqO:3, antiD:'none', dil:70, liq:5, exitV:20, revMult:2,
+    eqT:5, eqO:3, antiD:'none', dil:70, liq:5, exitV:20, exitMinY:8, exitMaxY:13, revMult:2, rampMode:'scurve', growthR:0,
   },
   likely: {
     spY:1.5, yrs:10, survR:70, invY:1, medR:5, sig:0.8, matY:4,
     royMode:'flat', thresh:500, flatR:5, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
-    eqT:10, eqO:5, antiD:'A', dil:60, liq:10, exitV:30, revMult:3,
+    eqT:10, eqO:5, antiD:'A', dil:60, liq:10, exitV:30, exitMinY:7, exitMaxY:12, revMult:3, rampMode:'scurve', growthR:3,
   },
   bull: {
     spY:2, yrs:10, survR:80, invY:1, medR:7, sig:0.7, matY:4,
     royMode:'flat', thresh:500, flatR:7, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
-    eqT:15, eqO:5, antiD:'B', dil:50, liq:20, exitV:50, revMult:5,
+    eqT:15, eqO:5, antiD:'B', dil:50, liq:20, exitV:50, exitMinY:6, exitMaxY:10, revMult:5, rampMode:'scurve', growthR:7,
   },
 };
 
@@ -70,20 +155,29 @@ function runScenario(p) {
   else if (antiD === 'A') effEq = eqT * (1 - dilP * 0.5);
   else                    effEq = eqT * (1 - dilP * 0.25);
 
-  const eqValue = Math.round(totalV * liqP) * exitV * effEq;
   const cohortSurvivors = survivors / yrs;
+  const rampMode  = p.rampMode || 'scurve';
+  const growthR   = (p.growthR || 0) / 100;
+  const exitMinY  = p.exitMinY || 7;
+  const exitMaxY  = p.exitMaxY || 12;
+  const windowLen = exitMaxY - exitMinY + 1;
   const cumRoyalties = [], cumInvestment = [], equityByYear = [];
-  let cumR = 0;
+  let cumR = 0, cumExits = 0;
 
   for (let y = 1; y <= horizonYrs; y++) {
-    let yRoy = 0;
-    for (let c = 1; c <= Math.min(y, yrs); c++) yRoy += avgRoy * cohortSurvivors * Math.min((y - c + 1) / matY, 1);
+    let yRoy = 0, exitsThisYear = 0;
+    for (let c = 1; c <= Math.min(y, yrs); c++) {
+      const age = y - c + 1;
+      const ramp = rampFn(age, matY, rampMode);
+      const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
+      yRoy += avgRoy * cohortSurvivors * ramp * postGrowth;
+      if (age >= exitMinY && age <= exitMaxY) exitsThisYear += cohortSurvivors * liqP / windowLen;
+    }
     cumR += yRoy;
-    const fullyMatureV = Math.min(Math.max(0, y - matY + 1), yrs) * spY;
-    const eqAtY = totalV > 0 ? eqValue * (fullyMatureV / totalV) : 0;
+    cumExits += exitsThisYear;
     cumRoyalties.push(Math.round(cumR * 10) / 10);
     cumInvestment.push(Math.round(Math.min(y, yrs) * invY * 10) / 10);
-    equityByYear.push(Math.round(eqAtY * 10) / 10);
+    equityByYear.push(Math.round(cumExits * exitV * effEq * 10) / 10);
   }
   return { cumRoyalties, cumInvestment, equityByYear };
 }
@@ -98,8 +192,12 @@ function applyPreset(name) {
   setV('capR', p.capR); setV('capMax', p.capMax);
   setV('eqT', p.eqT); setV('eqO', p.eqO);
   el('antiD').value = p.antiD;
-  setV('dil', p.dil); setV('liq', p.liq); setV('exitV', p.exitV); setV('revMult', p.revMult);
+  setV('dil', p.dil); setV('liq', p.liq); setV('exitV', p.exitV);
+  setV('exitMinY', p.exitMinY || 7); setV('exitMaxY', p.exitMaxY || 12);
+  setV('revMult', p.revMult);
   el('royMode').value = p.royMode;
+  el('rampMode').value = p.rampMode || 'scurve';
+  setV('growthR', p.growthR || 0);
   document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector('.preset-btn[data-preset="' + name + '"]');
   if (btn) btn.classList.add('active');
@@ -204,9 +302,14 @@ function calc() {
   const dilP   = parseInt(el('dil').value) / 100;
   const liqP   = parseInt(el('liq').value) / 100;
   const exitV  = parseFloat(el('exitV').value);
-  const antiD   = el('antiD').value;
-  const capMaxM = parseFloat(el('capMax').value);
-  const revMult = parseFloat(el('revMult').value);
+  const antiD    = el('antiD').value;
+  const capMaxM  = parseFloat(el('capMax').value);
+  const revMult  = parseFloat(el('revMult').value);
+  const rampMode  = el('rampMode').value;
+  const growthR   = parseInt(el('growthR').value) / 100;
+  const exitMinY  = parseInt(el('exitMinY').value);
+  const exitMaxY  = parseInt(el('exitMaxY').value);
+  const windowLen = Math.max(exitMaxY - exitMinY + 1, 1);
 
   // Update displayed values
   el('spYo').textContent   = spY % 1 === 0 ? spY : spY.toFixed(1);
@@ -227,8 +330,11 @@ function calc() {
   el('eqOo').textContent   = Math.round(eqO * 100) + '%';
   el('dilo').textContent   = Math.round(dilP * 100) + '%';
   el('liqo').textContent   = Math.round(liqP * 100) + '%';
-  el('exitVo').textContent   = '$' + Math.round(exitV) + 'M';
+  el('exitVo').textContent   = '$' + Math.round(exitV) + 'M (' + (exitV / medR).toFixed(1) + 'x rev)';
   el('revMulto').textContent = revMult.toFixed(1) + 'x';
+  el('growthRo').textContent   = parseInt(el('growthR').value) + '%';
+  el('exitMinYo').textContent  = exitMinY;
+  el('exitMaxYo').textContent  = exitMaxY;
 
   document.getElementById('flatParams').style.opacity = mode === 'flat' ? 1 : 0.3;
   document.getElementById('gradParams').style.opacity = mode === 'grad' ? 1 : 0.3;
@@ -288,32 +394,31 @@ function calc() {
   // 10-year cumulative curves
   const horizonYrs = 10;
   const cumRoyalties = [], cumInvestment = [], equityByYear = [], unrealizedEqByYear = [], totalByYear = [];
-  let cumR = 0;
+  const cohortSurvivors = survivors / yrs;
+  let cumR = 0, cumExits = 0;
   for (let y = 1; y <= horizonYrs; y++) {
     const cumI = Math.min(y, yrs) * invY;
 
-    // Royalty + unrealized equity: each cohort ramps linearly over matY years.
-    // Use survivors/yrs per cohort so this stays in sync with annualRoy.
-    const cohortSurvivors = survivors / yrs;
-    let yRoy = 0, portfolioVal = 0;
+    let yRoy = 0, portfolioVal = 0, exitsThisYear = 0;
     for (let c = 1; c <= Math.min(y, yrs); c++) {
-      const age  = y - c + 1;
-      const ramp = Math.min(age / matY, 1);
-      yRoy        += avgRoyPerVenture * cohortSurvivors * ramp;
-      portfolioVal += avgRevPerVenture * cohortSurvivors * ramp * revMult;
+      const age        = y - c + 1;
+      const ramp       = rampFn(age, matY, rampMode);
+      const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
+      yRoy        += avgRoyPerVenture * cohortSurvivors * ramp * postGrowth;
+      portfolioVal += avgRevPerVenture * cohortSurvivors * ramp * postGrowth * revMult;
+      if (age >= exitMinY && age <= exitMaxY) exitsThisYear += cohortSurvivors * liqP / windowLen;
     }
-    cumR += yRoy;
-    const unrealizedEqAtY = Math.round(portfolioVal * effEq * 10) / 10;
+    cumR     += yRoy;
+    cumExits += exitsThisYear;
 
-    // Realized equity: grows as ventures cross the full maturity threshold
-    const fullyMatureV = Math.min(Math.max(0, y - matY + 1), yrs) * spY;
-    const eqAtY = totalV > 0 ? Math.round(eqValue * (fullyMatureV / totalV) * 10) / 10 : 0;
+    const eqAtY          = Math.round(cumExits * exitV * effEq * 10) / 10;
+    const unrealizedEqAtY = Math.round(portfolioVal * effEq * 10) / 10;
 
     cumRoyalties.push(Math.round(cumR * 10) / 10);
     cumInvestment.push(Math.round(cumI * 10) / 10);
     equityByYear.push(eqAtY);
     unrealizedEqByYear.push(unrealizedEqAtY);
-    totalByYear.push(Math.round((cumR + unrealizedEqAtY) * 10) / 10);
+    totalByYear.push(Math.round((cumR + eqAtY) * 10) / 10);
   }
 
   const totalReturn = cumRoyalties[horizonYrs - 1] + eqValue;
@@ -343,7 +448,7 @@ function calc() {
   hyp += '<div class="hyp-item"><b>' + matY + ' yrs</b> from spin-out to revenue maturity</div>';
   hyp += '<div class="hyp-item"><b>Royalty:</b> ' + royDesc + ', kicks in at $' + Math.round(parseFloat(el('thresh').value)) + 'K</div>';
   hyp += '<div class="hyp-item"><b>Equity:</b> ' + Math.round(eqT * 100) + '% Thrive + ' + Math.round(eqO * 100) + '% OTC, anti-dilution through ' + antiD + '</div>';
-  hyp += '<div class="hyp-item"><b>' + Math.round(liqP * 100) + '%</b> of ventures reach a liquidity event at ~$' + Math.round(exitV) + 'M avg</div>';
+  hyp += '<div class="hyp-item"><b>' + Math.round(liqP * 100) + '%</b> of ventures exit between yr ' + exitMinY + '–' + exitMaxY + ' at ~$' + Math.round(exitV) + 'M avg</div>';
   el('hypBox').innerHTML = '<div style="font-size:14px;font-weight:500;margin:0 0 8px;color:var(--color-text-primary);">Current hypotheses</div>' + hyp;
 
   // Chart 1 — cumulative flows
@@ -376,4 +481,6 @@ function calc() {
 ids.forEach(id => el(id).addEventListener('input', calc));
 el('royMode').addEventListener('change', calc);
 el('antiD').addEventListener('change', calc);
+el('rampMode').addEventListener('change', calc);
+el('distModal').addEventListener('click', e => { if (e.target === el('distModal')) closeDistModal(); });
 calc();
