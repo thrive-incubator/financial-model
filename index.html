@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thrive Incubator Portfolio Simulation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div style="padding:1rem 0;">
+
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 1.5rem;" id="metrics">
+    <div class="mc"><div class="k">Annual royalty income (steady state)</div><div class="v" id="m1">—</div></div>
+    <div class="mc"><div class="k">Cumulative royalty (10 yr)</div><div class="v" id="m2">—</div></div>
+    <div class="mc"><div class="k">Portfolio equity value</div><div class="v" id="m3">—</div></div>
+    <div class="mc"><div class="k">Total return (royalty + equity)</div><div class="v" id="m4">—</div></div>
+    <div class="mc"><div class="k">Net return at year 5</div><div class="v" id="m5">—</div></div>
+    <div class="mc"><div class="k">Net return at year 10</div><div class="v" id="m6">—</div></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Portfolio parameters</div>
+    <div class="row"><span class="lbl">Spin-outs per year</span><input type="range" min="1" max="5" step="1" value="2" id="spY" style="flex:1;"><span class="val" id="spYo">2</span></div>
+    <div class="row"><span class="lbl">Years of operation</span><input type="range" min="3" max="10" step="1" value="10" id="yrs" style="flex:1;"><span class="val" id="yrso">10</span></div>
+    <div class="row"><span class="lbl">Survival rate (%)</span><input type="range" min="50" max="95" step="5" value="80" id="surv" style="flex:1;"><span class="val" id="survo">80%</span></div>
+    <div class="row"><span class="lbl">Yearly investment ($M)</span><input type="range" min="0.5" max="3" step="0.5" value="1" id="inv" style="flex:1;"><span class="val" id="invo">$1M/yr</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Revenue distribution (lognormal)</div>
+    <div class="row"><span class="lbl">Median revenue ($M)</span><input type="range" min="1" max="15" step="0.5" value="5" id="medR" style="flex:1;"><span class="val" id="medRo">$5M</span></div>
+    <div class="row"><span class="lbl">Spread (higher = more variance)</span><input type="range" min="0.3" max="1.5" step="0.1" value="0.8" id="sig" style="flex:1;"><span class="val" id="sigo">0.8</span></div>
+    <div class="row"><span class="lbl">Years to maturity</span><input type="range" min="2" max="7" step="1" value="4" id="matY" style="flex:1;"><span class="val" id="matYo">4</span></div>
+    <div id="distDesc" style="font-size:12px;color:var(--color-text-secondary);margin:4px 0 0;"></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Royalty structure</div>
+    <div class="row"><span class="lbl">Mode</span>
+      <select id="royMode" style="flex:1;">
+        <option value="flat">Flat rate</option>
+        <option value="grad">Graduated</option>
+        <option value="cap">Capped (lifetime cap per venture)</option>
+      </select>
+    </div>
+    <div class="row"><span class="lbl">Revenue threshold ($K)</span><input type="range" min="0" max="1000" step="50" value="500" id="thresh" style="flex:1;"><span class="val" id="thresho">$500K</span></div>
+
+    <div id="flatParams">
+      <div class="row"><span class="lbl">Royalty rate (%)</span><input type="range" min="1" max="15" step="0.5" value="5" id="flatR" style="flex:1;"><span class="val" id="flatRo">5%</span></div>
+    </div>
+
+    <div id="gradParams">
+      <div class="row"><span class="lbl">Rate up to $2M (%)</span><input type="range" min="1" max="10" step="0.5" value="3" id="g1r" style="flex:1;"><span class="val" id="g1ro">3%</span></div>
+      <div class="row"><span class="lbl">Rate $2M–$10M (%)</span><input type="range" min="1" max="15" step="0.5" value="5" id="g2r" style="flex:1;"><span class="val" id="g2ro">5%</span></div>
+      <div class="row"><span class="lbl">Rate above $10M (%)</span><input type="range" min="1" max="15" step="0.5" value="7" id="g3r" style="flex:1;"><span class="val" id="g3ro">7%</span></div>
+    </div>
+
+    <div id="capParams">
+      <div class="row"><span class="lbl">Royalty rate (%)</span><input type="range" min="1" max="15" step="0.5" value="5" id="capR" style="flex:1;"><span class="val" id="capRo">5%</span></div>
+      <div class="row"><span class="lbl">Lifetime cap per venture ($M)</span><input type="range" min="0.5" max="10" step="0.5" value="3" id="capMax" style="flex:1;"><span class="val" id="capMaxo">$3M</span></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Equity structure</div>
+    <div class="row"><span class="lbl">Thrive equity (%)</span><input type="range" min="0" max="20" step="1" value="10" id="eqT" style="flex:1;"><span class="val" id="eqTo">10%</span></div>
+    <div class="row"><span class="lbl">GU OTC equity (%)</span><input type="range" min="0" max="10" step="1" value="5" id="eqO" style="flex:1;"><span class="val" id="eqOo">5%</span></div>
+    <div class="row"><span class="lbl">Anti-dilution through</span>
+      <select id="antiD" style="flex:1;">
+        <option value="A" selected>Series A</option>
+        <option value="B">Series B</option>
+        <option value="none">None</option>
+      </select>
+    </div>
+    <div class="row"><span class="lbl">Dilution at exit (%)</span><input type="range" min="20" max="80" step="5" value="60" id="dil" style="flex:1;"><span class="val" id="dilo">60%</span></div>
+    <div class="row"><span class="lbl">% ventures with liquidity event</span><input type="range" min="0" max="30" step="5" value="10" id="liq" style="flex:1;"><span class="val" id="liqo">10%</span></div>
+    <div class="row"><span class="lbl">Avg exit valuation ($M)</span><input type="range" min="5" max="200" step="5" value="30" id="exitV" style="flex:1;"><span class="val" id="exitVo">$30M</span></div>
+    <div class="row"><span class="lbl">Unrealized valuation multiple</span><input type="range" min="1" max="10" step="0.5" value="3" id="revMult" style="flex:1;"><span class="val" id="revMulto">3.0x</span></div>
+  </div>
+
+  <div class="hyp" id="hypBox">
+    <div style="font-size:14px;font-weight:500;margin:0 0 8px;color:var(--color-text-primary);">Current hypotheses</div>
+  </div>
+
+  <div style="position:relative;width:100%;height:300px;margin:0 0 1rem;">
+    <canvas id="chart1"></canvas>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--color-text-secondary);margin:0 0 2rem;" id="leg1"></div>
+
+  <div style="font-size:14px;font-weight:500;margin:0 0 8px;color:var(--color-text-primary);">Simulated portfolio revenue distribution</div>
+  <div style="position:relative;width:100%;height:220px;margin:0 0 1rem;">
+    <canvas id="chart2"></canvas>
+  </div>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:1.5rem 0 0;">
+    <button onclick="sendPrompt('Draft a term sheet template for Thrive spin-outs based on this model: revenue royalty + equity hybrid')">Draft term sheet template ↗</button>
+    <button onclick="sendPrompt('How should we present this model to Georgetown OTC? What are the likely objections and how do we address them?')">OTC presentation strategy ↗</button>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="simulation.js"></script>
+</body>
+</html>
