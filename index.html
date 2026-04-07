@@ -130,6 +130,30 @@
     <div class="row"><span class="lbl">Unrealized valuation multiple</span><input type="range" min="1" max="10" step="0.5" value="3" id="revMult" style="flex:1;"><span class="val" id="revMulto">3.0x</span></div>
   </div>
 
+  <div class="sec">
+    <div class="sec-title">Shared services</div>
+    <div class="row"><span class="lbl">Pricing mode</span>
+      <select id="ssMode" style="flex:1;">
+        <option value="fixed">Fixed cost per company</option>
+        <option value="pct">% of company revenue</option>
+      </select>
+    </div>
+    <div id="ssFixedParams">
+      <div class="row"><span class="lbl">Annual cost per company ($K)</span><input type="range" min="10" max="500" step="10" value="100" id="ssCost" style="flex:1;"><span class="val" id="ssCosto">$100K</span></div>
+    </div>
+    <div id="ssPctParams">
+      <div class="row"><span class="lbl">% of company revenue</span><input type="range" min="0.5" max="10" step="0.5" value="2" id="ssPct" style="flex:1;"><span class="val" id="ssPcto">2%</span></div>
+    </div>
+    <div class="row"><span class="lbl">Markup above cost (%)</span><input type="range" min="0" max="100" step="5" value="20" id="ssMarkup" style="flex:1;"><span class="val" id="ssMarkupo">20%</span></div>
+    <div class="row"><span class="lbl">Subtract from investment line</span>
+      <select id="ssSubtract" style="flex:1;">
+        <option value="no">No</option>
+        <option value="net">Net (markup only)</option>
+        <option value="billed">Total billed (cost + markup)</option>
+      </select>
+    </div>
+  </div>
+
   <div class="hyp" id="hypBox">
     <div style="font-size:14px;font-weight:500;margin:0 0 8px;color:var(--color-text-primary);">Current hypotheses</div>
   </div>
@@ -154,6 +178,18 @@
     <canvas id="chart3"></canvas>
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--color-text-secondary);margin:0 0 2rem;" id="leg3"></div>
+
+  <div style="font-size:14px;font-weight:500;margin:2rem 0 4px;color:var(--color-text-primary);">Shared services P&amp;L</div>
+  <div style="font-size:12px;color:var(--color-text-secondary);margin:0 0 12px;">Annual billed to portfolio vs. Thrive net revenue (markup only).</div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 1rem;">
+    <div class="mc"><div class="k">Annual billed (yr 10)</div><div class="v" id="ss1">—</div></div>
+    <div class="mc"><div class="k">Thrive net/yr (markup)</div><div class="v" id="ss2">—</div></div>
+    <div class="mc"><div class="k">Cumulative net (10 yr)</div><div class="v" id="ss3">—</div></div>
+  </div>
+  <div style="position:relative;width:100%;height:260px;margin:0 0 1rem;">
+    <canvas id="chart4"></canvas>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--color-text-secondary);margin:0 0 2rem;" id="leg4"></div>
 
 </div>
 

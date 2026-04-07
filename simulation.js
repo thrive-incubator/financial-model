@@ -12,7 +12,7 @@ function boxMuller(i) {
   return Math.sqrt(-2 * Math.log(u1 + 0.001)) * Math.cos(2 * Math.PI * u2);
 }
 
-const ids = ['spY', 'yrs', 'surv', 'inv', 'medR', 'sig', 'matY', 'thresh', 'flatR', 'g1r', 'g2r', 'g3r', 'capR', 'capMax', 'eqT', 'eqO', 'dil', 'liq', 'exitV', 'exitMinY', 'exitMaxY', 'revMult', 'growthR'];
+const ids = ['spY', 'yrs', 'surv', 'inv', 'medR', 'sig', 'matY', 'thresh', 'flatR', 'g1r', 'g2r', 'g3r', 'capR', 'capMax', 'eqT', 'eqO', 'dil', 'liq', 'exitV', 'exitMinY', 'exitMaxY', 'revMult', 'growthR', 'ssCost', 'ssPct', 'ssMarkup'];
 
 // Returns 0→1 ramp value for a venture of given age, over matY years
 function rampFn(age, matY, mode) {
@@ -27,7 +27,7 @@ function rampFn(age, matY, mode) {
   return (1 / (1 + Math.exp(-k * (t - 0.5))) - s0) / (s1 - s0);
 }
 const el = k => document.getElementById(k);
-let c1, c2, c3, dc1, dc2;
+let c1, c2, c3, c4, dc1, dc2;
 
 function openDistModal() {
   const modal = el('distModal');
@@ -239,13 +239,15 @@ function netCard(id, total, inv) {
 
 // Persist toggle state across recalcs (chart is destroyed/recreated each time)
 const DATASETS = [
-  { label: 'Cumulative investment',    color: '#E24B4A' },
-  { label: 'Cumulative royalty',       color: '#1D9E75' },
-  { label: 'Realized equity (exits)',  color: '#534AB7' },
-  { label: 'Unrealized equity (paper)',color: '#0891B2' },
-  { label: 'Total value',              color: '#D97706' },
+  { label: 'Cumulative investment',          color: '#E24B4A' },
+  { label: 'Cumulative royalty',             color: '#1D9E75' },
+  { label: 'Realized equity (exits)',        color: '#534AB7' },
+  { label: 'Unrealized equity (paper)',      color: '#0891B2' },
+  { label: 'Total value',                    color: '#D97706' },
+  { label: 'Shared services (total billed)', color: '#9333EA' },
+  { label: 'Shared services (net to Thrive)',color: '#C026D3' },
 ];
-const chartHidden = [false, false, false, true, true];
+const chartHidden = [false, false, false, true, true, true, true];
 
 function renderLegend() {
   el('leg1').innerHTML = DATASETS.map((d, i) => `
@@ -307,9 +309,14 @@ function calc() {
   const revMult  = parseFloat(el('revMult').value);
   const rampMode  = el('rampMode').value;
   const growthR   = parseInt(el('growthR').value) / 100;
-  const exitMinY  = parseInt(el('exitMinY').value);
-  const exitMaxY  = parseInt(el('exitMaxY').value);
-  const windowLen = Math.max(exitMaxY - exitMinY + 1, 1);
+  const exitMinY   = parseInt(el('exitMinY').value);
+  const exitMaxY   = parseInt(el('exitMaxY').value);
+  const windowLen  = Math.max(exitMaxY - exitMinY + 1, 1);
+  const ssMode     = el('ssMode').value;
+  const ssCost     = parseFloat(el('ssCost').value) / 1000;  // $K → $M
+  const ssPct      = parseFloat(el('ssPct').value) / 100;
+  const ssMarkup   = parseFloat(el('ssMarkup').value) / 100;
+  const ssSubtract = el('ssSubtract').value;  // 'no' | 'net' | 'billed'
 
   // Update displayed values
   el('spYo').textContent   = spY % 1 === 0 ? spY : spY.toFixed(1);
@@ -335,6 +342,11 @@ function calc() {
   el('growthRo').textContent   = parseInt(el('growthR').value) + '%';
   el('exitMinYo').textContent  = exitMinY;
   el('exitMaxYo').textContent  = exitMaxY;
+  el('ssCosto').textContent    = '$' + parseInt(el('ssCost').value) + 'K';
+  el('ssPcto').textContent     = parseFloat(el('ssPct').value) + '%';
+  el('ssMarkupo').textContent  = parseInt(el('ssMarkup').value) + '%';
+  el('ssPctParams').style.opacity  = ssMode === 'pct'   ? 1 : 0.3;
+  el('ssFixedParams').style.opacity = ssMode === 'fixed' ? 1 : 0.3;
 
   document.getElementById('flatParams').style.opacity = mode === 'flat' ? 1 : 0.3;
   document.getElementById('gradParams').style.opacity = mode === 'grad' ? 1 : 0.3;
@@ -395,11 +407,13 @@ function calc() {
   const horizonYrs = 10;
   const cumRoyalties = [], cumInvestment = [], equityByYear = [], unrealizedEqByYear = [], totalByYear = [];
   const cohortSurvivors = survivors / yrs;
-  let cumR = 0, cumExits = 0;
+  let cumR = 0, cumExits = 0, cumSS = 0, cumBilledTotal = 0;
+  const ssAnnualBilled = [], ssAnnualNet = [], ssCumNet = [], ssCumBilled = [];
   for (let y = 1; y <= horizonYrs; y++) {
-    const cumI = Math.min(y, yrs) * invY;
-
     let yRoy = 0, portfolioVal = 0, exitsThisYear = 0;
+    // Count active survivors this year (all cohorts created so far that survived)
+    const activeCompanies = Math.min(y, yrs) * cohortSurvivors;
+
     for (let c = 1; c <= Math.min(y, yrs); c++) {
       const age        = y - c + 1;
       const ramp       = rampFn(age, matY, rampMode);
@@ -411,11 +425,40 @@ function calc() {
     cumR     += yRoy;
     cumExits += exitsThisYear;
 
-    const eqAtY          = Math.round(cumExits * exitV * effEq * 10) / 10;
+    // Shared services
+    let ssCostY;
+    if (ssMode === 'fixed') {
+      ssCostY = activeCompanies * ssCost;
+    } else {
+      // % of each company's current revenue
+      let totalRev = 0;
+      for (let c = 1; c <= Math.min(y, yrs); c++) {
+        const age = y - c + 1;
+        const ramp = rampFn(age, matY, rampMode);
+        const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
+        totalRev += avgRevPerVenture * cohortSurvivors * ramp * postGrowth;
+      }
+      ssCostY = totalRev * ssPct;
+    }
+    const ssBilledY = ssCostY * (1 + ssMarkup);
+    const ssNetY    = ssCostY * ssMarkup;          // markup is Thrive's revenue
+    cumSS += ssNetY;
+
+    cumBilledTotal += ssBilledY;
+    ssAnnualBilled.push(Math.round(ssBilledY * 100) / 100);
+    ssAnnualNet.push(Math.round(ssNetY * 100) / 100);
+    ssCumNet.push(Math.round(cumSS * 100) / 100);
+    ssCumBilled.push(Math.round(cumBilledTotal * 100) / 100);
+
+    const eqAtY           = Math.round(cumExits * exitV * effEq * 10) / 10;
     const unrealizedEqAtY = Math.round(portfolioVal * effEq * 10) / 10;
+    const grossInv  = Math.min(y, yrs) * invY;
+    const cumBilledY = ssAnnualBilled.reduce((a, b) => a + b, 0);  // sum so far (built incrementally)
+    const deduct    = ssSubtract === 'net' ? cumSS : ssSubtract === 'billed' ? cumBilledY : 0;
+    const cumI      = Math.max(0, Math.round((grossInv - deduct) * 10) / 10);
 
     cumRoyalties.push(Math.round(cumR * 10) / 10);
-    cumInvestment.push(Math.round(cumI * 10) / 10);
+    cumInvestment.push(cumI);
     equityByYear.push(eqAtY);
     unrealizedEqByYear.push(unrealizedEqAtY);
     totalByYear.push(Math.round((cumR + eqAtY) * 10) / 10);
@@ -432,6 +475,12 @@ function calc() {
   el('m4').style.color = roi >= 1 ? 'var(--color-text-success)' : 'var(--color-text-danger)';
   netCard('m5', cumRoyalties[4] + equityByYear[4], cumInvestment[4]);
   netCard('m6', cumRoyalties[horizonYrs - 1] + equityByYear[horizonYrs - 1], cumInvestment[horizonYrs - 1]);
+
+  // Shared services metrics
+  const fmtM = v => v >= 1 ? '$' + v.toFixed(1) + 'M' : '$' + (v * 1000).toFixed(0) + 'K';
+  el('ss1').textContent = fmtM(ssAnnualBilled[horizonYrs - 1]) + '/yr';
+  el('ss2').textContent = fmtM(ssAnnualNet[horizonYrs - 1]) + '/yr';
+  el('ss3').textContent = fmtM(ssCumNet[horizonYrs - 1]);
 
   // Hypotheses
   const royDesc = mode === 'flat'
@@ -460,8 +509,10 @@ function calc() {
       { label: 'Cumulative investment',    data: cumInvestment,    borderColor: '#E24B4A', backgroundColor: 'rgba(226,75,74,0.08)',   fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[0] },
       { label: 'Cumulative royalty',       data: cumRoyalties,     borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.08)',  fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[1] },
       { label: 'Realized equity (exits)',  data: equityByYear,     borderColor: '#534AB7', backgroundColor: 'rgba(83,74,183,0.08)',   fill: true, tension: 0.3, pointRadius: 3, borderDash: [5,4], hidden: chartHidden[2] },
-      { label: 'Unrealized equity (paper)',data: unrealizedEqByYear,borderColor: '#0891B2', backgroundColor: 'rgba(8,145,178,0.08)',  fill: true, tension: 0.3, pointRadius: 3, borderDash: [3,3], hidden: chartHidden[3] },
-      { label: 'Total incubator value',    data: totalByYear,      borderColor: '#D97706', backgroundColor: 'rgba(217,119,6,0.08)',   fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[4] },
+      { label: 'Unrealized equity (paper)',      data: unrealizedEqByYear, borderColor: '#0891B2', backgroundColor: 'rgba(8,145,178,0.08)',   fill: true, tension: 0.3, pointRadius: 3, borderDash: [3,3], hidden: chartHidden[3] },
+      { label: 'Total incubator value',          data: totalByYear,        borderColor: '#D97706', backgroundColor: 'rgba(217,119,6,0.08)',   fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[4] },
+      { label: 'Shared services (total billed)', data: ssCumBilled,        borderColor: '#9333EA', backgroundColor: 'rgba(147,51,234,0.08)', fill: true, tension: 0.3, pointRadius: 3, borderDash: [4,3], hidden: chartHidden[5] },
+      { label: 'Shared services (net to Thrive)',data: ssCumNet,           borderColor: '#C026D3', backgroundColor: 'rgba(192,38,211,0.08)', fill: true, tension: 0.3, pointRadius: 3, borderDash: [2,3], hidden: chartHidden[6] },
     ]},
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v + 'M' } }, x: { grid: { display: false } } } }
   });
@@ -475,6 +526,29 @@ function calc() {
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, callback: v => v + ' ventures' } }, x: { grid: { display: false }, ticks: { autoSkip: false } } } }
   });
 
+  // Chart 4 — shared services P&L
+  if (c4) c4.destroy();
+  const labels4 = Array.from({ length: horizonYrs }, (_, i) => 'Yr ' + (i + 1));
+  c4 = new Chart(el('chart4'), {
+    type: 'bar',
+    data: { labels: labels4, datasets: [
+      { label: 'Billed to companies', data: ssAnnualBilled, backgroundColor: 'rgba(83,74,183,0.25)', borderColor: '#534AB7', borderWidth: 1.5, borderRadius: 3 },
+      { label: 'Thrive net (markup)', data: ssAnnualNet,    backgroundColor: '#534AB7', borderRadius: 3 },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, ticks: { callback: v => v >= 1 ? '$' + v + 'M' : '$' + (v * 1000).toFixed(0) + 'K' } }
+      }
+    }
+  });
+  el('leg4').innerHTML = [
+    ['rgba(83,74,183,0.5)', 'Billed to companies (cost + markup)'],
+    ['#534AB7',             'Thrive net revenue (markup only)'],
+  ].map(([c, l]) => `<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:${c};"></span><span style="font-size:12px;color:var(--color-text-secondary);">${l}</span></span>`).join('');
+
   buildScenarioChart();
 }
 
@@ -482,5 +556,7 @@ ids.forEach(id => el(id).addEventListener('input', calc));
 el('royMode').addEventListener('change', calc);
 el('antiD').addEventListener('change', calc);
 el('rampMode').addEventListener('change', calc);
+el('ssMode').addEventListener('change', calc);
+el('ssSubtract').addEventListener('change', calc);  // select element
 el('distModal').addEventListener('click', e => { if (e.target === el('distModal')) closeDistModal(); });
 calc();
