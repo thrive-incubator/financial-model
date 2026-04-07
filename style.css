@@ -65,6 +65,12 @@ button:hover { background: var(--color-border-secondary); }
 .info-icon:focus .info-tooltip { display: block; }
 
 
+.limitations-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0 0 2rem; }
+.lim-card { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px; border-left: 3px solid var(--color-border-secondary); }
+.lim-card.lim-open { border-left-color: #D97706; }
+.lim-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); margin: 0 0 5px; }
+.lim-body { font-size: 12px; color: var(--color-text-secondary); line-height: 1.6; }
+
 .sec { margin: 0 0 1.5rem; }
 .sec-title { font-size: 16px; font-weight: 500; margin: 0 0 12px; color: var(--color-text-primary); }
 .row { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }

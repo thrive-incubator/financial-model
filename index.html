@@ -202,6 +202,53 @@
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--color-text-secondary);margin:0 0 2rem;" id="leg4"></div>
 
+  <div style="margin:2rem 0 0;">
+    <div style="font-size:14px;font-weight:500;margin:0 0 10px;color:var(--color-text-primary);">Model limitations &amp; open questions</div>
+    <div class="limitations-grid">
+
+      <div class="lim-card">
+        <div class="lim-title">No NPV / time value of money</div>
+        <div class="lim-body">All cash flows are shown in nominal dollars — $1M in year 10 is treated the same as $1M today. A proper investment case should discount future cash flows (e.g. at 8–10%) to get IRR and NPV. At a 10% discount rate, $10M in year 10 is worth ~$3.9M today.</div>
+      </div>
+
+      <div class="lim-card">
+        <div class="lim-title">OTC equity tracked but not modeled</div>
+        <div class="lim-body">The GU OTC equity slider appears in the UI but does not affect any calculation. It is informational only. If OTC co-invests or shares in returns, that needs to be wired into the equity and ROI calculations.</div>
+      </div>
+
+      <div class="lim-card">
+        <div class="lim-title">No correlation between revenue and exit probability</div>
+        <div class="lim-body">Every surviving venture has the same probability of reaching a liquidity event, regardless of revenue size. In reality, a $20M ARR company is far more likely to attract an acquirer than a $1M company. This understates equity returns for high-performing portfolios.</div>
+      </div>
+
+      <div class="lim-card">
+        <div class="lim-title">No post-maturity attrition</div>
+        <div class="lim-body">Survival rate is applied once at creation. Companies that survive never fail after that. In practice, ventures continue to fail at a lower rate even after reaching revenue maturity. This slightly overstates long-run royalty income.</div>
+      </div>
+
+      <div class="lim-card lim-open">
+        <div class="lim-title">IP ownership vs. licensing — open question</div>
+        <div class="lim-body">It is currently unclear whether Thrive retains IP ownership (with a license to the company) or transfers IP outright. This is a fundamental deal term: retained ownership creates leverage and ongoing royalty rights; a transfer may be cleaner for founders but weakens Thrive's long-term position.</div>
+      </div>
+
+      <div class="lim-card lim-open">
+        <div class="lim-title">Post-exit royalty continuity — assumed to stop</div>
+        <div class="lim-body">The model assumes royalties cease when a company is acquired or has a liquidity event. In practice, whether royalties survive a change of control is a critical contract term. Acquirers typically try to extinguish them; retaining them requires specific legal language.</div>
+      </div>
+
+      <div class="lim-card lim-open">
+        <div class="lim-title">Revenue-based vs. profit-based royalties</div>
+        <div class="lim-body">Royalties are currently calculated on gross revenue. This can penalize early-stage companies with high costs. An alternative is to base royalties on gross margin or EBITDA once revenue crosses a threshold. The right choice depends on the type of company and the stage at which royalties kick in.</div>
+      </div>
+
+      <div class="lim-card">
+        <div class="lim-title">Advanced deal terms not modeled</div>
+        <div class="lim-body">Several common incubator mechanisms are excluded from this model: <b>royalty buyout</b> (company pays a lump sum to exit the royalty obligation); <b>royalty-to-equity conversion</b> (accumulated royalties convert to additional equity at a milestone); <b>pro-rata rights</b> (Thrive's right to invest in future rounds to maintain its equity stake). These terms can significantly change returns and should be explored in later-stage term sheet design.</div>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
