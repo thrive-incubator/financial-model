@@ -28,6 +28,35 @@ function rampFn(age, matY, mode) {
 }
 const el = k => document.getElementById(k);
 let c1, c2, c3, c4, dc1, dc2;
+let _eqAllTime = 0, _eqRealized = 0, _showAllEq = false;
+let _cumRoyalties = [], _equityByYear = [], _cumInvestment = [], _invM = 0, _horizonYrs = 10;
+
+function updateEqCards() {
+  const eq10    = _showAllEq ? _eqAllTime  : _eqRealized;
+  // For yr5 and yr10, scale allTime equity proportionally to how much has realized by then
+  const eq5     = _showAllEq
+    ? (_eqRealized > 0 ? _equityByYear[4] / _eqRealized * _eqAllTime : 0)
+    : _equityByYear[4];
+  const totalReturn = _cumRoyalties[_horizonYrs - 1] + eq10;
+  const roi = _invM > 0 ? totalReturn / _invM : 0;
+
+  el('m3').textContent = '$' + eq10.toFixed(1) + 'M';
+  el('m4').textContent = '$' + totalReturn.toFixed(1) + 'M (' + roi.toFixed(1) + 'x)';
+  el('m4').style.color = roi >= 1 ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+  netCard('m5', _cumRoyalties[4] + eq5, _cumInvestment[4]);
+  netCard('m6', _cumRoyalties[_horizonYrs - 1] + eq10, _cumInvestment[_horizonYrs - 1]);
+}
+
+function toggleEqView() {
+  _showAllEq = !_showAllEq;
+  const toggle = el('m3toggle');
+  const dot = toggle.firstElementChild;
+  toggle.style.background = _showAllEq ? '#534AB7' : 'var(--color-border-secondary)';
+  dot.style.transform = _showAllEq ? 'translateX(12px)' : 'translateX(0)';
+  el('m3toggleLabel').textContent = _showAllEq ? 'All' : 'Yr 10';
+  el('m3label').textContent = _showAllEq ? 'Total equity (all exits)' : 'Realized equity at yr 10';
+  updateEqCards();
+}
 
 function openDistModal() {
   const modal = el('distModal');
@@ -108,7 +137,7 @@ const PRESETS = {
     eqT:5, eqO:3, antiD:'none', dil:70, liq:5, exitV:20, exitMinY:8, exitMaxY:13, revMult:2, rampMode:'scurve', growthR:0,
   },
   likely: {
-    spY:1.5, yrs:10, survR:70, invY:1, medR:5, sig:0.8, matY:4,
+    spY:1.5, yrs:10, survR:70, invY:1, medR:5, sig:0.5, matY:4,
     royMode:'flat', thresh:500, flatR:5, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
     eqT:10, eqO:5, antiD:'A', dil:60, liq:10, exitV:30, exitMinY:7, exitMaxY:12, revMult:3, rampMode:'scurve', growthR:3,
   },
@@ -464,17 +493,18 @@ function calc() {
     totalByYear.push(Math.round((cumR + eqAtY) * 10) / 10);
   }
 
-  const totalReturn = cumRoyalties[horizonYrs - 1] + eqValue;
-  const roi = invM > 0 ? totalReturn / invM : 0;
+  _eqRealized    = equityByYear[horizonYrs - 1];
+  _eqAllTime     = liqVentures * exitV * effEq;
+  _cumRoyalties  = cumRoyalties;
+  _equityByYear  = equityByYear;
+  _cumInvestment = cumInvestment;
+  _invM          = invM;
+  _horizonYrs    = horizonYrs;
 
   // Metrics
   el('m1').textContent = '$' + annualRoy.toFixed(1) + 'M/yr';
   el('m2').textContent = '$' + cumRoyalties[horizonYrs - 1].toFixed(1) + 'M';
-  el('m3').textContent = '$' + eqValue.toFixed(1) + 'M';
-  el('m4').textContent = '$' + totalReturn.toFixed(1) + 'M (' + roi.toFixed(1) + 'x)';
-  el('m4').style.color = roi >= 1 ? 'var(--color-text-success)' : 'var(--color-text-danger)';
-  netCard('m5', cumRoyalties[4] + equityByYear[4], cumInvestment[4]);
-  netCard('m6', cumRoyalties[horizonYrs - 1] + equityByYear[horizonYrs - 1], cumInvestment[horizonYrs - 1]);
+  updateEqCards();
 
   // Shared services metrics
   const fmtM = v => v >= 1 ? '$' + v.toFixed(1) + 'M' : '$' + (v * 1000).toFixed(0) + 'K';
@@ -559,4 +589,4 @@ el('rampMode').addEventListener('change', calc);
 el('ssMode').addEventListener('change', calc);
 el('ssSubtract').addEventListener('change', calc);  // select element
 el('distModal').addEventListener('click', e => { if (e.target === el('distModal')) closeDistModal(); });
-calc();
+applyPreset('likely');

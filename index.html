@@ -32,7 +32,18 @@
   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 1.5rem;" id="metrics">
     <div class="mc"><div class="k">Annual royalty income (steady state)</div><div class="v" id="m1">—</div></div>
     <div class="mc"><div class="k">Cumulative royalty (10 yr)</div><div class="v" id="m2">—</div></div>
-    <div class="mc"><div class="k">Portfolio equity value</div><div class="v" id="m3">—</div></div>
+    <div class="mc">
+  <div class="k" style="display:flex;align-items:center;justify-content:space-between;">
+    <span id="m3label">Realized equity at yr 10</span>
+    <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--color-text-secondary);">
+      <span id="m3toggleLabel">All</span>
+      <span id="m3toggle" onclick="toggleEqView()" style="display:inline-flex;width:28px;height:16px;border-radius:8px;background:var(--color-border-secondary);cursor:pointer;align-items:center;padding:2px;transition:background 0.2s;">
+        <span style="width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.2);transition:transform 0.2s;"></span>
+      </span>
+    </span>
+  </div>
+  <div class="v" id="m3">—</div>
+</div>
     <div class="mc"><div class="k">Total return (royalty + equity)</div><div class="v" id="m4">—</div></div>
     <div class="mc"><div class="k">Net return at year 5</div><div class="v" id="m5">—</div></div>
     <div class="mc"><div class="k">Net return at year 10</div><div class="v" id="m6">—</div></div>
@@ -70,7 +81,7 @@
   <div class="sec">
     <div class="sec-title">Revenue distribution (lognormal) <span class="info-icon" tabindex="0" onclick="openDistModal()" style="cursor:pointer;font-style:normal;">ⓘ</span></div>
     <div class="row"><span class="lbl">Median revenue ($M)</span><input type="range" min="1" max="15" step="0.5" value="5" id="medR" style="flex:1;"><span class="val" id="medRo">$5M</span></div>
-    <div class="row"><span class="lbl">Spread (higher = more variance)</span><input type="range" min="0.3" max="1.5" step="0.1" value="0.8" id="sig" style="flex:1;"><span class="val" id="sigo">0.8</span></div>
+    <div class="row"><span class="lbl">Spread (higher = more variance)</span><input type="range" min="0" max="1" step="0.1" value="0.5" id="sig" style="flex:1;"><span class="val" id="sigo">0.8</span></div>
     <div class="row"><span class="lbl">Years to maturity</span><input type="range" min="2" max="7" step="1" value="4" id="matY" style="flex:1;"><span class="val" id="matYo">4</span></div>
     <div class="row"><span class="lbl">Growth curve</span>
       <select id="rampMode" style="flex:1;">
