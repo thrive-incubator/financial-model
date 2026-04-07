@@ -141,13 +141,13 @@ function netCard(id, total, inv) {
 
 // Persist toggle state across recalcs (chart is destroyed/recreated each time)
 const DATASETS = [
-  { label: 'Cumulative investment',   color: '#E24B4A' },
-  { label: 'Cumulative royalty',      color: '#1D9E75' },
-  { label: 'Realized equity (exits)', color: '#534AB7' },
+  { label: 'Cumulative investment',    color: '#E24B4A' },
+  { label: 'Cumulative royalty',       color: '#1D9E75' },
+  { label: 'Realized equity (exits)',  color: '#534AB7' },
   { label: 'Unrealized equity (paper)',color: '#0891B2' },
-  { label: 'Total incubator value',   color: '#D97706' },
+  { label: 'Total value',              color: '#D97706' },
 ];
-const chartHidden = DATASETS.map(() => false);
+const chartHidden = [false, false, false, true, true];
 
 function renderLegend() {
   el('leg1').innerHTML = DATASETS.map((d, i) => `
