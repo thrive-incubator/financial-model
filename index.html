@@ -10,7 +10,7 @@
 
 <div style="padding:1rem 0;">
 
-  <div style="display:flex;gap:8px;margin:0 0 1.5rem;align-items:center;">
+  <div style="display:flex;gap:8px;margin:0 0 0.75rem;align-items:center;">
     <button class="preset-btn active" data-preset="likely" onclick="applyPreset('likely')">Likely / Default</button>
     <button class="preset-btn" data-preset="bear" onclick="applyPreset('bear')">Bear / Conservative</button>
     <button class="preset-btn" data-preset="bull" onclick="applyPreset('bull')">Bull / Optimistic</button>
@@ -20,7 +20,7 @@
         1 spin-out/yr · 60% survival · $3M median revenue · 6 yrs to maturity<br>
         3% royalty · 5% Thrive equity · no anti-dilution · 5% liquidity at $20M exit<br><br>
         <b>Likely / Default</b><br>
-        1.5 spin-outs/yr · 70% survival · $5M median revenue · 4 yrs to maturity<br>
+        2 spin-outs/yr · 80% survival · $4M median revenue · 5 yrs to maturity<br>
         5% royalty · 10% Thrive equity · Series A anti-dilution · 10% liquidity at $30M exit<br><br>
         <b>Bull / Optimistic</b><br>
         2 spin-outs/yr · 80% survival · $7M median revenue · 4 yrs to maturity<br>
@@ -29,9 +29,15 @@
     </span>
   </div>
 
+  <div style="display:flex;gap:8px;margin:0 0 1.5rem;align-items:center;">
+    <span style="font-size:13px;color:var(--color-text-secondary);">Return model:</span>
+    <button id="modeRoyaltyBtn" class="preset-btn active" onclick="setModelMode('royalty')" style="padding:4px 10px;font-size:12px;">Royalty</button>
+    <button id="modeDividendBtn" class="preset-btn" onclick="setModelMode('dividend')" style="padding:4px 10px;font-size:12px;">Dividend</button>
+  </div>
+
   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 1.5rem;" id="metrics">
-    <div class="mc"><div class="k">Annual royalty income (steady state)</div><div class="v" id="m1">—</div></div>
-    <div class="mc"><div class="k">Cumulative royalty (10 yr)</div><div class="v" id="m2">—</div></div>
+    <div class="mc"><div class="k" id="m1label">Annual royalty income (steady state)</div><div class="v" id="m1">—</div></div>
+    <div class="mc"><div class="k" id="m2label">Cumulative royalty (10 yr)</div><div class="v" id="m2">—</div></div>
     <div class="mc">
   <div class="k" style="display:flex;align-items:center;justify-content:space-between;">
     <span id="m3label">Realized equity at yr 10</span>
@@ -47,6 +53,48 @@
     <div class="mc"><div class="k">Total return (royalty + equity)</div><div class="v" id="m4">—</div></div>
     <div class="mc"><div class="k">Net return at year 5</div><div class="v" id="m5">—</div></div>
     <div class="mc"><div class="k">Net return at year 10</div><div class="v" id="m6">—</div></div>
+  </div>
+
+  <!-- Year-by-year snapshot panel -->
+  <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:1rem 1.25rem;margin:0 0 1rem;">
+    <div style="display:flex;align-items:center;gap:12px;margin:0 0 12px;">
+      <span style="font-size:14px;font-weight:500;color:var(--color-text-primary);">Year snapshot</span>
+      <input type="range" min="1" max="10" step="1" value="5" id="yearSlider" style="flex:1;" oninput="updateYearSnapshot()">
+      <span class="val" id="yearSliderLabel" style="min-width:60px;">Year 5</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+      <div class="mc"><div class="k">Active companies</div><div class="v" id="snapActiveC" style="font-size:20px;">—</div></div>
+      <div class="mc"><div class="k" id="snapRoyLabel">Annual royalty</div><div class="v" id="snapAnnualRoy" style="font-size:18px;">—</div></div>
+      <div class="mc"><div class="k">SS net profit <span style="font-weight:400;color:var(--color-text-secondary);font-size:11px;">(markup only)</span></div><div class="v" id="snapSSNet" style="font-size:18px;">—</div></div>
+      <div class="mc"><div class="k" id="snapBurnLabel">Net annual burn</div><div class="v" id="snapCumNet" style="font-size:18px;">—</div></div>
+    </div>
+  </div>
+
+  <!-- Funding runway panel -->
+  <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:1rem 1.25rem;margin:0 0 1.5rem;">
+    <div style="display:flex;align-items:center;gap:12px;margin:0 0 12px;flex-wrap:wrap;">
+      <span style="font-size:14px;font-weight:500;color:var(--color-text-primary);">Funding runway analysis</span>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;">
+        <span style="font-size:13px;color:var(--color-text-secondary);">Buffer</span>
+        <input type="range" min="0" max="40" step="5" value="10" id="safetyBuffer" style="width:70px;" oninput="calcRunway()">
+        <span style="font-size:13px;font-weight:500;color:var(--color-text-primary);" id="safetyBufferVal">10%</span>
+        <span style="font-size:13px;color:var(--color-text-secondary);margin-left:4px;">Raise ($M)</span>
+        <input type="number" min="0.5" max="30" step="0.5" value="5" id="raiseInput" oninput="calcRunway()">
+        <span style="font-size:12px;color:var(--color-text-secondary);" id="runwayEffective">—</span>
+        <span style="font-size:13px;color:var(--color-text-secondary);">→ min. needed:</span>
+        <span id="runwayMinNeeded" style="font-size:13px;font-weight:600;">—</span>
+        <span style="font-size:13px;color:var(--color-text-secondary);">→ runway:</span>
+        <span id="runwayYrs" style="font-size:14px;font-weight:600;color:#534AB7;">—</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">
+      <div class="mc"><div class="k">Active cos at runway end</div><div class="v" id="runwayActiveC" style="font-size:18px;">—</div></div>
+      <div class="mc"><div class="k" id="runwayAnnualRoyLabel">Annual run rate at end</div><div class="v" id="runwayAnnualRoy" style="font-size:18px;">—</div></div>
+      <div class="mc"><div class="k" id="runwayRoyLabel">Cumulative royalty at end</div><div class="v" id="runwayCumRoy" style="font-size:18px;">—</div></div>
+      <div class="mc"><div class="k">Self-sustaining year <span style="font-weight:400;font-size:10px;color:var(--color-text-secondary);">annual income ≥ annual cost</span></div><div class="v" id="runwaySelfFund" style="font-size:18px;">—</div></div>
+      <div class="mc"><div class="k">Investment payback <span style="font-weight:400;font-size:10px;color:var(--color-text-secondary);">cumulative return ≥ invested</span></div><div class="v" id="runwayCrossover" style="font-size:18px;">—</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--color-text-secondary);margin-top:8px;">Runway accounts for royalty/dividend income and shared services net profit reducing annual cash burn each year.</div>
   </div>
 
   <div class="sec">
@@ -80,9 +128,9 @@
 
   <div class="sec">
     <div class="sec-title">Revenue distribution (lognormal) <span class="info-icon" tabindex="0" onclick="openDistModal()" style="cursor:pointer;font-style:normal;">ⓘ</span></div>
-    <div class="row"><span class="lbl">Median revenue ($M)</span><input type="range" min="1" max="15" step="0.5" value="5" id="medR" style="flex:1;"><span class="val" id="medRo">$5M</span></div>
+    <div class="row"><span class="lbl">Median revenue ($M)</span><input type="range" min="1" max="15" step="0.5" value="4" id="medR" style="flex:1;"><span class="val" id="medRo">$4M</span></div>
     <div class="row"><span class="lbl">Spread (higher = more variance)</span><input type="range" min="0" max="1" step="0.1" value="0.5" id="sig" style="flex:1;"><span class="val" id="sigo">0.8</span></div>
-    <div class="row"><span class="lbl">Years to maturity</span><input type="range" min="2" max="7" step="1" value="4" id="matY" style="flex:1;"><span class="val" id="matYo">4</span></div>
+    <div class="row"><span class="lbl">Years to maturity</span><input type="range" min="2" max="7" step="1" value="5" id="matY" style="flex:1;"><span class="val" id="matYo">5</span></div>
     <div class="row"><span class="lbl">Growth curve</span>
       <select id="rampMode" style="flex:1;">
         <option value="linear">Linear</option>
@@ -95,36 +143,70 @@
     <div id="distDesc" style="font-size:12px;color:var(--color-text-secondary);margin:4px 0 0;"></div>
   </div>
 
+  <!-- Dividend detail modal -->
+  <div id="divModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:center;justify-content:center;">
+    <div style="background:var(--color-background-primary);border-radius:var(--border-radius-lg);padding:1.5rem;width:min(820px,95vw);max-height:90vh;overflow:auto;position:relative;">
+      <button onclick="closeDividendModal()" style="position:absolute;top:12px;right:14px;padding:4px 10px;font-size:16px;line-height:1;">✕</button>
+      <div style="font-size:15px;font-weight:500;margin:0 0 4px;">Dividend — single median company</div>
+      <div style="font-size:12px;color:var(--color-text-secondary);margin:0 0 1.25rem;">Revenue ramps to maturity; profit margin ramps with the same curve, so dividend ∝ ramp².</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+        <div>
+          <div style="font-size:13px;font-weight:500;margin:0 0 6px;">Annual dividend to Thrive ($)</div>
+          <div style="position:relative;height:220px;"><canvas id="divChart"></canvas></div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:500;margin:0 0 6px;">Effective profit margin (%)</div>
+          <div style="position:relative;height:220px;"><canvas id="divMarginChart"></canvas></div>
+        </div>
+      </div>
+      <div id="divModalDesc" style="font-size:12px;color:var(--color-text-secondary);margin:10px 0 0;"></div>
+    </div>
+  </div>
+
   <div class="sec">
-    <div class="sec-title">Royalty structure</div>
-    <div class="row"><span class="lbl">Mode</span>
-      <select id="royMode" style="flex:1;">
-        <option value="flat">Flat rate</option>
-        <option value="grad">Graduated</option>
-        <option value="cap">Capped (lifetime cap per venture)</option>
-      </select>
-    </div>
-    <div class="row"><span class="lbl">Revenue threshold ($K)</span><input type="range" min="0" max="1000" step="50" value="500" id="thresh" style="flex:1;"><span class="val" id="thresho">$500K</span></div>
-
-    <div id="flatParams">
-      <div class="row"><span class="lbl">Royalty rate (%)</span><input type="range" min="1" max="15" step="0.5" value="5" id="flatR" style="flex:1;"><span class="val" id="flatRo">5%</span></div>
+    <div class="sec-title" style="display:flex;align-items:center;gap:6px;">
+      <span id="returnStructureTitle">Royalty structure</span>
+      <span id="divInfoBtn" class="info-icon" tabindex="0" onclick="openDividendModal()" style="cursor:pointer;font-style:normal;display:none;">ⓘ</span>
     </div>
 
-    <div id="gradParams">
-      <div class="row"><span class="lbl">Rate up to $2M (%)</span><input type="range" min="1" max="10" step="0.5" value="3" id="g1r" style="flex:1;"><span class="val" id="g1ro">3%</span></div>
-      <div class="row"><span class="lbl">Rate $2M–$10M (%)</span><input type="range" min="1" max="15" step="0.5" value="5" id="g2r" style="flex:1;"><span class="val" id="g2ro">5%</span></div>
-      <div class="row"><span class="lbl">Rate above $10M (%)</span><input type="range" min="1" max="15" step="0.5" value="7" id="g3r" style="flex:1;"><span class="val" id="g3ro">7%</span></div>
+    <!-- Royalty parameters -->
+    <div id="royaltyContent">
+      <div class="row"><span class="lbl">Mode</span>
+        <select id="royMode" style="flex:1;">
+          <option value="flat">Flat rate</option>
+          <option value="grad">Graduated</option>
+          <option value="cap">Capped (lifetime cap per venture)</option>
+        </select>
+      </div>
+      <div class="row"><span class="lbl">Revenue threshold ($K)</span><input type="range" min="0" max="1000" step="50" value="500" id="thresh" style="flex:1;"><span class="val" id="thresho">$500K</span></div>
+
+      <div id="flatParams">
+        <div class="row"><span class="lbl">Royalty rate (%)</span><input type="range" min="1" max="15" step="0.5" value="5" id="flatR" style="flex:1;"><span class="val" id="flatRo">5%</span></div>
+      </div>
+
+      <div id="gradParams">
+        <div class="row"><span class="lbl">Rate up to $2M (%)</span><input type="range" min="1" max="10" step="0.5" value="3" id="g1r" style="flex:1;"><span class="val" id="g1ro">3%</span></div>
+        <div class="row"><span class="lbl">Rate $2M–$10M (%)</span><input type="range" min="1" max="15" step="0.5" value="5" id="g2r" style="flex:1;"><span class="val" id="g2ro">5%</span></div>
+        <div class="row"><span class="lbl">Rate above $10M (%)</span><input type="range" min="1" max="15" step="0.5" value="7" id="g3r" style="flex:1;"><span class="val" id="g3ro">7%</span></div>
+      </div>
+
+      <div id="capParams">
+        <div class="row"><span class="lbl">Royalty rate (%)</span><input type="range" min="1" max="15" step="0.5" value="5" id="capR" style="flex:1;"><span class="val" id="capRo">5%</span></div>
+        <div class="row"><span class="lbl">Lifetime cap per venture ($M)</span><input type="range" min="0.5" max="10" step="0.5" value="3" id="capMax" style="flex:1;"><span class="val" id="capMaxo">$3M</span></div>
+      </div>
     </div>
 
-    <div id="capParams">
-      <div class="row"><span class="lbl">Royalty rate (%)</span><input type="range" min="1" max="15" step="0.5" value="5" id="capR" style="flex:1;"><span class="val" id="capRo">5%</span></div>
-      <div class="row"><span class="lbl">Lifetime cap per venture ($M)</span><input type="range" min="0.5" max="10" step="0.5" value="3" id="capMax" style="flex:1;"><span class="val" id="capMaxo">$3M</span></div>
+    <!-- Dividend parameters (shown in dividend mode) -->
+    <div id="dividendContent" style="display:none;">
+      <div class="row"><span class="lbl">Thrive ownership (%)</span><input type="range" min="5" max="50" step="1" value="25" id="divOwn" style="flex:1;"><span class="val" id="divOwno">25%</span></div>
+      <div class="row"><span class="lbl">Profit margin at maturity (%)</span><input type="range" min="10" max="80" step="5" value="35" id="divMargin" style="flex:1;"><span class="val" id="divMargino">35%</span></div>
+      <div class="row"><span class="lbl">Dividend payout ratio (%)</span><input type="range" min="20" max="100" step="5" value="60" id="divPayout" style="flex:1;"><span class="val" id="divPayouto">60%</span></div>
     </div>
   </div>
 
   <div class="sec">
     <div class="sec-title">Equity structure</div>
-    <div class="row"><span class="lbl">Thrive equity (%)</span><input type="range" min="0" max="20" step="1" value="10" id="eqT" style="flex:1;"><span class="val" id="eqTo">10%</span></div>
+    <div class="row" id="eqTRow"><span class="lbl">Thrive equity (%)</span><input type="range" min="0" max="50" step="1" value="10" id="eqT" style="flex:1;"><span class="val" id="eqTo">10%</span></div>
     <div class="row"><span class="lbl">GU OTC equity (%)</span><input type="range" min="0" max="10" step="1" value="5" id="eqO" style="flex:1;"><span class="val" id="eqOo">5%</span></div>
     <div class="row"><span class="lbl">Anti-dilution through</span>
       <select id="antiD" style="flex:1;">
@@ -184,7 +266,7 @@
     <button onclick="sendPrompt('How should we present this model to Georgetown OTC? What are the likely objections and how do we address them?')">OTC presentation strategy ↗</button>
 </div-->
 
-  <div style="font-size:14px;font-weight:500;margin:2rem 0 8px;color:var(--color-text-primary);">Scenario comparison — investment vs. royalty</div>
+  <div style="font-size:14px;font-weight:500;margin:2rem 0 8px;color:var(--color-text-primary);" id="scenarioChartTitle">Scenario comparison — investment vs. royalty</div>
   <div style="position:relative;width:100%;height:300px;margin:0 0 1rem;">
     <canvas id="chart3"></canvas>
   </div>

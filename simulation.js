@@ -12,7 +12,7 @@ function boxMuller(i) {
   return Math.sqrt(-2 * Math.log(u1 + 0.001)) * Math.cos(2 * Math.PI * u2);
 }
 
-const ids = ['spY', 'yrs', 'surv', 'inv', 'medR', 'sig', 'matY', 'thresh', 'flatR', 'g1r', 'g2r', 'g3r', 'capR', 'capMax', 'eqT', 'eqO', 'dil', 'liq', 'exitV', 'exitMinY', 'exitMaxY', 'revMult', 'growthR', 'ssCost', 'ssPct', 'ssMarkup'];
+const ids = ['spY', 'yrs', 'surv', 'inv', 'medR', 'sig', 'matY', 'thresh', 'flatR', 'g1r', 'g2r', 'g3r', 'capR', 'capMax', 'eqT', 'eqO', 'dil', 'liq', 'exitV', 'exitMinY', 'exitMaxY', 'revMult', 'growthR', 'ssCost', 'ssPct', 'ssMarkup', 'divOwn', 'divMargin', 'divPayout'];
 
 // Returns 0→1 ramp value for a venture of given age, over matY years
 function rampFn(age, matY, mode) {
@@ -27,9 +27,11 @@ function rampFn(age, matY, mode) {
   return (1 / (1 + Math.exp(-k * (t - 0.5))) - s0) / (s1 - s0);
 }
 const el = k => document.getElementById(k);
-let c1, c2, c3, c4, dc1, dc2;
+let c1, c2, c3, c4, dc1, dc2, cDiv, cDivMargin;
 let _eqAllTime = 0, _eqRealized = 0, _showAllEq = false;
 let _cumRoyalties = [], _equityByYear = [], _cumInvestment = [], _invM = 0, _horizonYrs = 10;
+let _annualRoyalties = [], _ssAnnualNetArr = [], _ssAnnualBilledArr = [], _ssCumNetArr = [], _ssCumBilledArr = [], _activeCompaniesArr = [];
+let modelMode = 'royalty';
 
 function updateEqCards() {
   const eq10    = _showAllEq ? _eqAllTime  : _eqRealized;
@@ -137,7 +139,7 @@ const PRESETS = {
     eqT:5, eqO:3, antiD:'none', dil:70, liq:5, exitV:20, exitMinY:8, exitMaxY:13, revMult:2, rampMode:'scurve', growthR:0,
   },
   likely: {
-    spY:1.5, yrs:10, survR:70, invY:1, medR:5, sig:0.5, matY:4,
+    spY:2, yrs:10, survR:80, invY:1, medR:4, sig:0.5, matY:5,
     royMode:'flat', thresh:500, flatR:5, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
     eqT:10, eqO:5, antiD:'A', dil:60, liq:10, exitV:30, exitMinY:7, exitMaxY:12, revMult:3, rampMode:'scurve', growthR:3,
   },
@@ -148,7 +150,7 @@ const PRESETS = {
   },
 };
 
-function runScenario(p) {
+function runScenario(p, divOpts) {
   const spY = p.spY, yrs = p.yrs, survR = p.survR / 100, invY = p.invY;
   const medR = p.medR, sigma = p.sig, matY = p.matY;
   const mode = p.royMode, tM = p.thresh / 1000;
@@ -160,24 +162,35 @@ function runScenario(p) {
   const mu = Math.log(medR);
 
   const sampleRevenues = [];
-  for (let i = 0; i < SAMPLE_SIZE; i++) sampleRevenues.push(Math.exp(mu + sigma * boxMuller(i)));
+  let sampleTotalRev = 0;
+  for (let i = 0; i < SAMPLE_SIZE; i++) {
+    const r = Math.exp(mu + sigma * boxMuller(i));
+    sampleRevenues.push(r);
+    sampleTotalRev += r;
+  }
+  const avgRevPerVenture = sampleTotalRev / SAMPLE_SIZE;
 
-  let sampleTotalRoy = 0;
-  sampleRevenues.forEach(r => {
-    if (r <= tM) return;
-    const eligible = r - tM;
-    if (mode === 'flat') { sampleTotalRoy += eligible * p.flatR / 100; return; }
-    if (mode === 'grad') {
-      const r1 = p.g1r / 100, r2 = p.g2r / 100, r3 = p.g3r / 100;
-      const b1 = 2 - tM, b2 = 10 - tM;
-      if (eligible <= b1) { sampleTotalRoy += eligible * r1; return; }
-      let roy = b1 * r1;
-      if (eligible <= b2) { sampleTotalRoy += roy + (eligible - b1) * r2; return; }
-      sampleTotalRoy += roy + (b2 - b1) * r2 + (eligible - b2) * r3; return;
-    }
-    sampleTotalRoy += Math.min(eligible * p.capR / 100, p.capMax);
-  });
-  const avgRoy = sampleTotalRoy / SAMPLE_SIZE;
+  let avgRoy;
+  if (divOpts) {
+    avgRoy = avgRevPerVenture * divOpts.margin * divOpts.payout * divOpts.ownership;
+  } else {
+    let sampleTotalRoy = 0;
+    sampleRevenues.forEach(r => {
+      if (r <= tM) return;
+      const eligible = r - tM;
+      if (mode === 'flat') { sampleTotalRoy += eligible * p.flatR / 100; return; }
+      if (mode === 'grad') {
+        const r1 = p.g1r / 100, r2 = p.g2r / 100, r3 = p.g3r / 100;
+        const b1 = 2 - tM, b2 = 10 - tM;
+        if (eligible <= b1) { sampleTotalRoy += eligible * r1; return; }
+        let roy = b1 * r1;
+        if (eligible <= b2) { sampleTotalRoy += roy + (eligible - b1) * r2; return; }
+        sampleTotalRoy += roy + (b2 - b1) * r2 + (eligible - b2) * r3; return;
+      }
+      sampleTotalRoy += Math.min(eligible * p.capR / 100, p.capMax);
+    });
+    avgRoy = sampleTotalRoy / SAMPLE_SIZE;
+  }
 
   let effEq = eqT;
   if (antiD === 'none')   effEq = eqT * (1 - dilP);
@@ -199,7 +212,13 @@ function runScenario(p) {
       const age = y - c + 1;
       const ramp = rampFn(age, matY, rampMode);
       const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
-      yRoy += avgRoy * cohortSurvivors * ramp * postGrowth;
+      if (divOpts) {
+        // margin ramps from 0 in year 1, reaching target at maturity (shifted by 1)
+        const marginRamp = rampFn(age - 1, matY, rampMode);
+        yRoy += avgRoy * cohortSurvivors * ramp * marginRamp * postGrowth;
+      } else {
+        yRoy += avgRoy * cohortSurvivors * ramp * postGrowth;
+      }
       if (age >= exitMinY && age <= exitMaxY) exitsThisYear += cohortSurvivors * liqP / windowLen;
     }
     cumR += yRoy;
@@ -227,16 +246,23 @@ function applyPreset(name) {
   el('royMode').value = p.royMode;
   el('rampMode').value = p.rampMode || 'scurve';
   setV('growthR', p.growthR || 0);
-  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.preset-btn[data-preset]').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector('.preset-btn[data-preset="' + name + '"]');
   if (btn) btn.classList.add('active');
   calc();
 }
 
 function buildScenarioChart() {
-  const bear   = runScenario(PRESETS.bear);
-  const likely = runScenario(PRESETS.likely);
-  const bull   = runScenario(PRESETS.bull);
+  const divOpts = modelMode === 'dividend' ? {
+    ownership: parseFloat(el('divOwn').value) / 100,
+    margin:    parseFloat(el('divMargin').value) / 100,
+    payout:    parseFloat(el('divPayout').value) / 100,
+  } : null;
+  const term = modelMode === 'royalty' ? 'royalty' : 'dividend';
+  el('scenarioChartTitle').textContent = 'Scenario comparison — investment vs. ' + term;
+  const bear   = runScenario(PRESETS.bear, divOpts);
+  const likely = runScenario(PRESETS.likely, divOpts);
+  const bull   = runScenario(PRESETS.bull, divOpts);
   const labels = Array.from({ length: 10 }, (_, i) => 'Yr ' + (i + 1));
   if (c3) c3.destroy();
   c3 = new Chart(el('chart3'), {
@@ -251,10 +277,11 @@ function buildScenarioChart() {
     ]},
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v + 'M' } }, x: { grid: { display: false } } } }
   });
+  const termCap = term[0].toUpperCase() + term.slice(1);
   el('leg3').innerHTML = [
     ['#E24B4A', 'Cumulative investment'],
-    ['rgba(29,158,117,0.4)', 'Royalty range (bear – bull)'],
-    ['#1D9E75', 'Cumulative royalty (likely)'],
+    ['rgba(29,158,117,0.4)', termCap + ' range (bear – bull)'],
+    ['#1D9E75', 'Cumulative ' + term + ' (likely)'],
   ].map(([c, l]) => `<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:${c};"></span><span style="font-size:12px;color:var(--color-text-secondary);">${l}</span></span>`).join('');
 }
 
@@ -328,7 +355,12 @@ function calc() {
   const sigma  = parseFloat(el('sig').value);
   const matY   = parseInt(el('matY').value);
   const mode   = el('royMode').value;
-  const eqT    = parseInt(el('eqT').value) / 100;
+  // In dividend mode, equity stake is the same as dividend ownership
+  let eqT = parseInt(el('eqT').value) / 100;
+  if (modelMode === 'dividend') {
+    eqT = parseFloat(el('divOwn').value) / 100;
+    el('eqT').value = Math.round(eqT * 100);
+  }
   const eqO    = parseInt(el('eqO').value) / 100;
   const dilP   = parseInt(el('dil').value) / 100;
   const liqP   = parseInt(el('liq').value) / 100;
@@ -381,6 +413,17 @@ function calc() {
   document.getElementById('gradParams').style.opacity = mode === 'grad' ? 1 : 0.3;
   document.getElementById('capParams').style.opacity  = mode === 'cap'  ? 1 : 0.3;
 
+  // Dividend slider display values
+  el('divOwno').textContent    = parseFloat(el('divOwn').value) + '%';
+  el('divMargino').textContent = parseFloat(el('divMargin').value) + '%';
+  el('divPayouto').textContent = parseFloat(el('divPayout').value) + '%';
+
+  // Update metric label names based on mode
+  const term = modelMode === 'royalty' ? 'royalty' : 'dividend';
+  el('m1label').textContent = 'Annual ' + term + ' income (steady state)';
+  el('m2label').textContent = 'Cumulative ' + term + ' (10 yr)';
+  el('returnStructureTitle').textContent = modelMode === 'royalty' ? 'Royalty structure' : 'Dividend structure';
+
   // Simulation
   const totalV = spY * yrs;
   const survivors = Math.round(totalV * survR);
@@ -398,13 +441,21 @@ function calc() {
 
   let sampleTotalRoy = 0, sampleTotalRev = 0;
   sampleRevenues.forEach(r => {
-    let roy = royaltyForVenture(r, mode);
-    if (mode === 'cap') roy = Math.min(roy, capMaxM);
+    let roy = modelMode === 'royalty' ? royaltyForVenture(r, mode) : 0;
+    if (modelMode === 'royalty' && mode === 'cap') roy = Math.min(roy, capMaxM);
     sampleTotalRoy += roy;
     sampleTotalRev += r;
   });
-  const avgRoyPerVenture = sampleTotalRoy / SAMPLE_SIZE;
   const avgRevPerVenture = sampleTotalRev / SAMPLE_SIZE;
+  let avgRoyPerVenture;
+  if (modelMode === 'royalty') {
+    avgRoyPerVenture = sampleTotalRoy / SAMPLE_SIZE;
+  } else {
+    const divOwn    = parseFloat(el('divOwn').value) / 100;
+    const divMargin = parseFloat(el('divMargin').value) / 100;
+    const divPayout = parseFloat(el('divPayout').value) / 100;
+    avgRoyPerVenture = avgRevPerVenture * divMargin * divPayout * divOwn;
+  }
   const annualRoy = avgRoyPerVenture * survivors;
 
   // Revenue distribution — scale sample fractions to actual survivor count
@@ -438,21 +489,30 @@ function calc() {
   const cohortSurvivors = survivors / yrs;
   let cumR = 0, cumExits = 0, cumSS = 0, cumBilledTotal = 0;
   const ssAnnualBilled = [], ssAnnualNet = [], ssCumNet = [], ssCumBilled = [];
+  const annualRoyalties = [], activeCompaniesArr = [];
   for (let y = 1; y <= horizonYrs; y++) {
     let yRoy = 0, portfolioVal = 0, exitsThisYear = 0;
     // Count active survivors this year (all cohorts created so far that survived)
     const activeCompanies = Math.min(y, yrs) * cohortSurvivors;
+    activeCompaniesArr.push(Math.round(activeCompanies * 10) / 10);
 
     for (let c = 1; c <= Math.min(y, yrs); c++) {
       const age        = y - c + 1;
       const ramp       = rampFn(age, matY, rampMode);
       const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
-      yRoy        += avgRoyPerVenture * cohortSurvivors * ramp * postGrowth;
+      if (modelMode === 'dividend') {
+        // margin ramps from 0 in year 1, reaching target at maturity (shifted by 1)
+        const marginRamp = rampFn(age - 1, matY, rampMode);
+        yRoy += avgRoyPerVenture * cohortSurvivors * ramp * marginRamp * postGrowth;
+      } else {
+        yRoy += avgRoyPerVenture * cohortSurvivors * ramp * postGrowth;
+      }
       portfolioVal += avgRevPerVenture * cohortSurvivors * ramp * postGrowth * revMult;
       if (age >= exitMinY && age <= exitMaxY) exitsThisYear += cohortSurvivors * liqP / windowLen;
     }
     cumR     += yRoy;
     cumExits += exitsThisYear;
+    annualRoyalties.push(yRoy);
 
     // Shared services
     let ssCostY;
@@ -493,13 +553,19 @@ function calc() {
     totalByYear.push(Math.round((cumR + eqAtY) * 10) / 10);
   }
 
-  _eqRealized    = equityByYear[horizonYrs - 1];
-  _eqAllTime     = liqVentures * exitV * effEq;
-  _cumRoyalties  = cumRoyalties;
-  _equityByYear  = equityByYear;
-  _cumInvestment = cumInvestment;
-  _invM          = invM;
-  _horizonYrs    = horizonYrs;
+  _eqRealized        = equityByYear[horizonYrs - 1];
+  _eqAllTime         = liqVentures * exitV * effEq;
+  _cumRoyalties      = cumRoyalties;
+  _equityByYear      = equityByYear;
+  _cumInvestment     = cumInvestment;
+  _invM              = invM;
+  _horizonYrs        = horizonYrs;
+  _annualRoyalties   = annualRoyalties;
+  _ssAnnualNetArr    = ssAnnualNet;
+  _ssAnnualBilledArr = ssAnnualBilled;
+  _ssCumNetArr       = ssCumNet;
+  _ssCumBilledArr    = ssCumBilled;
+  _activeCompaniesArr = activeCompaniesArr;
 
   // Metrics
   el('m1').textContent = '$' + annualRoy.toFixed(1) + 'M/yr';
@@ -513,11 +579,17 @@ function calc() {
   el('ss3').textContent = fmtM(ssCumNet[horizonYrs - 1]);
 
   // Hypotheses
-  const royDesc = mode === 'flat'
-    ? parseFloat(el('flatR').value) + '% flat'
-    : mode === 'grad'
-    ? 'graduated (' + parseFloat(el('g1r').value) + '/' + parseFloat(el('g2r').value) + '/' + parseFloat(el('g3r').value) + '%)'
-    : 'capped at $' + capMaxM.toFixed(1) + 'M';
+  let returnDesc;
+  if (modelMode === 'royalty') {
+    const royDesc = mode === 'flat'
+      ? parseFloat(el('flatR').value) + '% flat'
+      : mode === 'grad'
+      ? 'graduated (' + parseFloat(el('g1r').value) + '/' + parseFloat(el('g2r').value) + '/' + parseFloat(el('g3r').value) + '%)'
+      : 'capped at $' + capMaxM.toFixed(1) + 'M';
+    returnDesc = '<div class="hyp-item"><b>Royalty:</b> ' + royDesc + ', kicks in at $' + Math.round(parseFloat(el('thresh').value)) + 'K</div>';
+  } else {
+    returnDesc = '<div class="hyp-item"><b>Dividend:</b> ' + parseFloat(el('divOwn').value) + '% ownership · ' + parseFloat(el('divMargin').value) + '% margin at maturity (ramps with revenue) · ' + parseFloat(el('divPayout').value) + '% payout</div>';
+  }
 
   let hyp = '';
   hyp += '<div class="hyp-item"><b>' + totalV + '</b> total ventures (' + spY + '/yr × ' + yrs + ' yrs)</div>';
@@ -525,7 +597,7 @@ function calc() {
   hyp += '<div class="hyp-item"><b>$' + invY.toFixed(1) + 'M/yr</b> → $' + invM.toFixed(1) + 'M total investment</div>';
   hyp += '<div class="hyp-item"><b>$' + medR.toFixed(1) + 'M</b> median mature revenue, spread ' + sigma.toFixed(1) + '</div>';
   hyp += '<div class="hyp-item"><b>' + matY + ' yrs</b> from spin-out to revenue maturity</div>';
-  hyp += '<div class="hyp-item"><b>Royalty:</b> ' + royDesc + ', kicks in at $' + Math.round(parseFloat(el('thresh').value)) + 'K</div>';
+  hyp += returnDesc;
   hyp += '<div class="hyp-item"><b>Equity:</b> ' + Math.round(eqT * 100) + '% Thrive + ' + Math.round(eqO * 100) + '% OTC, anti-dilution through ' + antiD + '</div>';
   hyp += '<div class="hyp-item"><b>' + Math.round(liqP * 100) + '%</b> of ventures exit between yr ' + exitMinY + '–' + exitMaxY + ' at ~$' + Math.round(exitV) + 'M avg</div>';
   el('hypBox').innerHTML = '<div style="font-size:14px;font-weight:500;margin:0 0 8px;color:var(--color-text-primary);">Current hypotheses</div>' + hyp;
@@ -580,13 +652,226 @@ function calc() {
   ].map(([c, l]) => `<span style="display:flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:${c};"></span><span style="font-size:12px;color:var(--color-text-secondary);">${l}</span></span>`).join('');
 
   buildScenarioChart();
+  updateYearSnapshot();
+  calcRunway();
 }
 
-ids.forEach(id => el(id).addEventListener('input', calc));
+function setModelMode(mode) {
+  modelMode = mode;
+  el('royaltyContent').style.display  = mode === 'royalty'  ? '' : 'none';
+  el('dividendContent').style.display = mode === 'dividend' ? '' : 'none';
+  el('modeRoyaltyBtn').classList.toggle('active', mode === 'royalty');
+  el('modeDividendBtn').classList.toggle('active', mode === 'dividend');
+  // Grey out Thrive equity row in dividend mode (linked to ownership slider)
+  const eqTRow = el('eqTRow');
+  if (eqTRow) {
+    eqTRow.style.opacity = mode === 'dividend' ? 0.4 : 1;
+    eqTRow.style.pointerEvents = mode === 'dividend' ? 'none' : '';
+  }
+  // Show ⓘ info button only in dividend mode
+  const divInfoBtn = el('divInfoBtn');
+  if (divInfoBtn) divInfoBtn.style.display = mode === 'dividend' ? '' : 'none';
+  calc();
+}
+
+function openDividendModal() {
+  el('divModal').style.display = 'flex';
+  buildDividendChart();
+}
+function closeDividendModal() {
+  el('divModal').style.display = 'none';
+}
+
+function buildDividendChart() {
+  const medR     = parseFloat(el('medR').value);
+  const matY     = parseInt(el('matY').value);
+  const rampMode = el('rampMode').value;
+  const growthR  = parseInt(el('growthR').value) / 100;
+  const divOwn   = parseFloat(el('divOwn').value) / 100;
+  const divMargin = parseFloat(el('divMargin').value) / 100;
+  const divPayout = parseFloat(el('divPayout').value) / 100;
+
+  const labels = [], data = [], marginData = [];
+  for (let age = 1; age <= 10; age++) {
+    labels.push('Yr ' + age);
+    const ramp = rampFn(age, matY, rampMode);
+    const marginRamp = rampFn(age - 1, matY, rampMode);  // starts at 0 in year 1
+    const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
+    const dividend = medR * ramp * postGrowth * (divMargin * marginRamp) * divPayout * divOwn;
+    data.push(Math.round(dividend * 1000) / 1000);
+    marginData.push(Math.round(divMargin * marginRamp * postGrowth * 1000) / 10);  // in %
+  }
+
+  const ctx = el('divChart');
+  if (cDiv) cDiv.destroy();
+  cDiv = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: '#534AB7', borderRadius: 4, barPercentage: 0.6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, ticks: { callback: v => v >= 1 ? '$' + v.toFixed(2) + 'M' : '$' + (v * 1000).toFixed(0) + 'K' } }
+      }
+    }
+  });
+
+  const ctxM = el('divMarginChart');
+  if (cDivMargin) cDivMargin.destroy();
+  cDivMargin = new Chart(ctxM, {
+    type: 'line',
+    data: { labels, datasets: [{
+      data: marginData,
+      borderColor: '#1D9E75',
+      backgroundColor: 'rgba(29,158,117,0.08)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 3,
+    }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, ticks: { callback: v => v + '%' } }
+      }
+    }
+  });
+
+  const fullDiv = (medR * divMargin * divPayout * divOwn * 1000).toFixed(0);
+  el('divModalDesc').textContent =
+    'At full maturity: $' + medR.toFixed(1) + 'M revenue × ' + Math.round(divMargin * 100) + '% margin × ' +
+    Math.round(divPayout * 100) + '% payout × ' + Math.round(divOwn * 100) + '% ownership = $' + fullDiv + 'K/yr per company.';
+}
+
+function updateYearSnapshot() {
+  if (!_cumRoyalties.length) return;
+  const y = parseInt(el('yearSlider').value);
+  el('yearSliderLabel').textContent = 'Year ' + y;
+  const idx = y - 1;
+  const fmtM = v => Math.abs(v) >= 1 ? '$' + v.toFixed(1) + 'M' : '$' + (v * 1000).toFixed(0) + 'K';
+
+  const activeC  = _activeCompaniesArr[idx] || 0;
+  const annualRoy = _annualRoyalties[idx] || 0;
+  // Compute cumulative from raw annual arrays to avoid rounding divergence
+  const cumRoy    = _annualRoyalties.slice(0, y).reduce((a, b) => a + b, 0);
+  // SS net profit = markup revenue only (what Thrive keeps, not total billed to companies)
+  const ssAnnNet    = _ssAnnualNetArr[idx] || 0;
+  const ssAnnBilled = _ssAnnualBilledArr[idx] || 0;
+  const ssCumNet    = _ssAnnualNetArr.slice(0, y).reduce((a, b) => a + b, 0);
+  // Net annual burn = what comes out of the raise this year (positive = spending down reserves)
+  const annualCost = idx < parseInt(el('yrs').value) ? parseFloat(el('inv').value) : 0;
+  const netBurn    = annualCost - annualRoy - ssAnnNet;
+
+  // Active companies: show as integer range (e.g. 1.6 → "1 – 2")
+  const acLow = Math.floor(activeC), acHigh = Math.ceil(activeC);
+  el('snapActiveC').textContent = acLow === acHigh ? acLow : acLow + ' – ' + acHigh;
+  el('snapRoyLabel').textContent = modelMode === 'royalty' ? 'Annual royalty' : 'Annual dividend';
+  el('snapAnnualRoy').innerHTML = fmtM(annualRoy) + '<div style="font-size:12px;font-weight:400;color:var(--color-text-secondary);margin-top:2px;">Cum: ' + fmtM(cumRoy) + '</div>';
+  el('snapSSNet').innerHTML     = fmtM(ssAnnNet) + ' <span style="font-size:13px;font-weight:400;color:var(--color-text-secondary);">of ' + fmtM(ssAnnBilled) + ' billed</span>' + '<div style="font-size:12px;font-weight:400;color:var(--color-text-secondary);margin-top:2px;">Cum: ' + fmtM(ssCumNet) + '</div>';
+  // Net burn: red when spending down reserves, green when self-sustaining this year
+  const burnLabel = netBurn > 0 ? 'Net annual burn' : 'Annual surplus';
+  el('snapBurnLabel').textContent = burnLabel;
+  el('snapCumNet').textContent = netBurn > 0 ? fmtM(netBurn) : '+' + fmtM(-netBurn);
+  el('snapCumNet').style.color = netBurn > 0 ? 'var(--color-text-danger)' : 'var(--color-text-success)';
+}
+
+function calcRunway() {
+  if (!_cumRoyalties.length) return;
+  const raise = parseFloat(el('raiseInput').value) || 5;
+  const invY  = parseFloat(el('inv').value);
+  const yrs   = parseInt(el('yrs').value);
+  const fmtM  = v => Math.abs(v) >= 1 ? '$' + v.toFixed(1) + 'M' : '$' + (v * 1000).toFixed(0) + 'K';
+
+  // Compute minimum raise needed: the maximum cumulative deficit across all years
+  // (i.e. the worst-case cash shortfall if you started with $0)
+  let runningBal = 0, minRaiseNeeded = 0;
+  for (let y = 1; y <= 10; y++) {
+    const annualOut = y <= yrs ? invY : 0;
+    const annualIn  = (_annualRoyalties[y - 1] || 0) + (_ssAnnualNetArr[y - 1] || 0);
+    runningBal = runningBal - annualOut + annualIn;
+    minRaiseNeeded = Math.max(minRaiseNeeded, -runningBal);
+  }
+  const buffer = parseInt(el('safetyBuffer').value) / 100;
+  el('safetyBufferVal').textContent = Math.round(buffer * 100) + '%';
+  const minRaiseWithBuffer = minRaiseNeeded * (1 + buffer);
+  const effectiveRaise = raise * (1 - buffer);
+  const raiseCoversAll = raise >= minRaiseWithBuffer;
+  el('runwayMinNeeded').textContent = fmtM(minRaiseWithBuffer);
+  el('runwayMinNeeded').style.color = raiseCoversAll ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+
+  // Year-by-year cash balance: spend invY each year (while in investment period),
+  // earn annual royalty/dividend + SS net profit back
+  let balance = effectiveRaise;
+  let actualRunway = 10;
+  let survived = true;
+  for (let y = 1; y <= 10; y++) {
+    const annualOut = y <= yrs ? invY : 0;
+    const annualIn  = (_annualRoyalties[y - 1] || 0) + (_ssAnnualNetArr[y - 1] || 0);
+    balance = balance - annualOut + annualIn;
+    if (balance < 0) {
+      actualRunway = y - 1;
+      survived = false;
+      break;
+    }
+  }
+
+  el('runwayYrs').textContent = survived ? '10+ yrs ✓' : (actualRunway + ' yr' + (actualRunway !== 1 ? 's' : ''));
+  el('runwayYrs').style.color = survived ? 'var(--color-text-success)' : '#534AB7';
+  el('runwayEffective').textContent = buffer > 0 ? '(' + fmtM(effectiveRaise) + ' effective)' : '';
+
+  const idx = Math.max(Math.min(actualRunway, 10) - 1, 0);
+  // Active companies: show as integer range
+  const acR = _activeCompaniesArr[idx] || 0;
+  const acLow = Math.floor(acR), acHigh = Math.ceil(acR);
+  el('runwayActiveC').textContent  = acLow === acHigh ? acLow : acLow + ' – ' + acHigh;
+  el('runwayCumRoy').textContent   = fmtM(_cumRoyalties[idx] || 0);
+  el('runwayAnnualRoy').textContent = fmtM(_annualRoyalties[idx] || 0) + '/yr';
+
+  // Self-sustaining year: when annual income (royalty + SS net) ≥ annual investment spend
+  // Interpolated to show fractional year (e.g. "Yr 3.4")
+  let selfFundYear = null;
+  for (let y = 1; y <= 10; y++) {
+    const annualIncome = (_annualRoyalties[y - 1] || 0) + (_ssAnnualNetArr[y - 1] || 0);
+    const annualCost = y <= yrs ? invY : 0;
+    if (annualIncome >= annualCost) {
+      if (y === 1) {
+        selfFundYear = 1;
+      } else {
+        const prevIncome = (_annualRoyalties[y - 2] || 0) + (_ssAnnualNetArr[y - 2] || 0);
+        const fraction = (annualCost - prevIncome) / (annualIncome - prevIncome);
+        selfFundYear = (y - 1) + fraction;
+      }
+      break;
+    }
+  }
+  const sfWithinRunway = selfFundYear !== null && selfFundYear <= actualRunway;
+  el('runwaySelfFund').textContent = selfFundYear !== null ? 'Yr ' + selfFundYear.toFixed(1) : 'Beyond yr 10';
+  el('runwaySelfFund').style.color = sfWithinRunway ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+
+  // Investment payback: year when cumulative return (royalty + equity + SS net) ≥ cumulative investment
+  let crossover = null;
+  for (let i = 0; i < _cumRoyalties.length; i++) {
+    const inflow = (_cumRoyalties[i] || 0) + (_equityByYear[i] || 0) + (_ssCumNetArr[i] || 0);
+    if (inflow >= (_cumInvestment[i] || Infinity)) { crossover = i + 1; break; }
+  }
+  const withinRunway = crossover !== null && crossover <= actualRunway;
+  el('runwayCrossover').textContent = crossover !== null ? 'Yr ' + crossover : 'Beyond yr 10';
+  el('runwayCrossover').style.color = withinRunway ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+
+  const term = modelMode === 'royalty' ? 'royalty' : 'dividend';
+  el('runwayRoyLabel').textContent      = 'Cumulative ' + term + ' at end';
+  el('runwayAnnualRoyLabel').textContent = 'Annual ' + term + ' run rate at end';
+}
+
+ids.forEach(id => { const e = el(id); if (e) e.addEventListener('input', calc); });
 el('royMode').addEventListener('change', calc);
 el('antiD').addEventListener('change', calc);
 el('rampMode').addEventListener('change', calc);
 el('ssMode').addEventListener('change', calc);
-el('ssSubtract').addEventListener('change', calc);  // select element
+el('ssSubtract').addEventListener('change', calc);
+el('raiseInput').addEventListener('input', calcRunway);
+el('safetyBuffer').addEventListener('input', calcRunway);
 el('distModal').addEventListener('click', e => { if (e.target === el('distModal')) closeDistModal(); });
 applyPreset('likely');
