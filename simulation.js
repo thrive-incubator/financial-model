@@ -28,6 +28,8 @@ function rampFn(age, matY, mode) {
 }
 const el = k => document.getElementById(k);
 let c1, c2, c3, c4, dc1, dc2, cDiv, cDivMargin;
+let chart1View = 'cumulative';
+let _chart1Data = null;
 let _eqAllTime = 0, _eqRealized = 0, _showAllEq = false;
 let _cumRoyalties = [], _equityByYear = [], _cumInvestment = [], _invM = 0, _horizonYrs = 10;
 let _annualRoyalties = [], _ssAnnualNetArr = [], _ssAnnualBilledArr = [], _ssCumNetArr = [], _ssCumBilledArr = [], _activeCompaniesArr = [];
@@ -295,17 +297,35 @@ function netCard(id, total, inv) {
 
 // Persist toggle state across recalcs (chart is destroyed/recreated each time)
 const DATASETS = [
-  { label: 'Cumulative investment',          color: '#E24B4A' },
-  { label: 'Cumulative royalty',             color: '#1D9E75' },
-  { label: 'Realized equity (exits)',        color: '#534AB7' },
-  { label: 'Unrealized equity (paper)',      color: '#0891B2' },
-  { label: 'Total value',                    color: '#D97706' },
-  { label: 'Shared services (total billed)', color: '#9333EA' },
-  { label: 'Shared services (net to Thrive)',color: '#C026D3' },
+  { label: 'Cumulative investment',             color: '#E24B4A' },
+  { label: 'Cumulative royalty',                color: '#1D9E75' },  // label updated dynamically
+  { label: 'Realized equity (exits)',           color: '#534AB7' },
+  { label: 'Unrealized equity (paper)',         color: '#0891B2' },
+  { label: 'Total value (royalty + equity + SS net)', color: '#D97706' },
+  { label: 'Shared services (total billed)',    color: '#9333EA' },
+  { label: 'Shared services net to Thrive',     color: '#C026D3' },
 ];
 const chartHidden = [false, false, false, true, true, true, true];
 
 function renderLegend() {
+  // Keep label[1] in sync with model mode
+  DATASETS[1].label = modelMode === 'dividend' ? 'Cumulative dividend' : 'Cumulative royalty';
+
+  if (chart1View === 'annual') {
+    const items = [
+      { color: '#1D9E75', label: modelMode === 'dividend' ? 'Annual dividend' : 'Annual royalty' },
+      { color: '#534AB7', label: 'Realized equity (exits)' },
+      { color: '#C026D3', label: 'Shared services net to Thrive' },
+      { color: '#E24B4A', label: 'Annual investment' },
+    ];
+    el('leg1').innerHTML = items.map(d =>
+      `<span style="display:flex;align-items:center;gap:6px;">
+        <span style="width:10px;height:10px;border-radius:2px;flex-shrink:0;background:${d.color};"></span>
+        <span style="font-size:12px;color:var(--color-text-secondary);">${d.label}</span>
+      </span>`).join('');
+    return;
+  }
+
   el('leg1').innerHTML = DATASETS.map((d, i) => `
     <span data-idx="${i}" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;opacity:${chartHidden[i] ? 0.35 : 1}">
       <span style="width:10px;height:10px;border-radius:2px;flex-shrink:0;background:${d.color};"></span>
@@ -319,6 +339,92 @@ function renderLegend() {
       renderLegend();
     });
   });
+}
+
+function setChart1View(view) {
+  chart1View = view;
+  el('c1ViewCum').classList.toggle('active', view === 'cumulative');
+  el('c1ViewAnn').classList.toggle('active', view === 'annual');
+  renderChart1();
+}
+
+function renderChart1() {
+  if (!_chart1Data) return;
+  const { cumRoyalties, cumInvestment, equityByYear, unrealizedEqByYear, totalByYear,
+          ssCumBilled, ssCumNet, annualRoyalties, ssAnnualNet, invY, yrs, horizonYrs } = _chart1Data;
+  const labels = Array.from({ length: horizonYrs }, (_, i) => 'Yr ' + (i + 1));
+
+  if (c1) c1.destroy();
+
+  if (chart1View === 'cumulative') {
+    c1 = new Chart(el('chart1'), {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: 'Cumulative investment',              data: cumInvestment,      borderColor: '#E24B4A', backgroundColor: 'rgba(226,75,74,0.08)',   fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[0] },
+        { label: DATASETS[1].label,                    data: cumRoyalties,       borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.08)',  fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[1] },
+        { label: 'Realized equity (exits)',            data: equityByYear,       borderColor: '#534AB7', backgroundColor: 'rgba(83,74,183,0.08)',   fill: true, tension: 0.3, pointRadius: 3, borderDash: [5,4], hidden: chartHidden[2] },
+        { label: 'Unrealized equity (paper)',          data: unrealizedEqByYear, borderColor: '#0891B2', backgroundColor: 'rgba(8,145,178,0.08)',   fill: true, tension: 0.3, pointRadius: 3, borderDash: [3,3], hidden: chartHidden[3] },
+        { label: 'Total value (royalty + equity + SS net)', data: totalByYear,   borderColor: '#D97706', backgroundColor: 'rgba(217,119,6,0.08)',   fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[4] },
+        { label: 'Shared services (total billed)',     data: ssCumBilled,        borderColor: '#9333EA', backgroundColor: 'rgba(147,51,234,0.08)', fill: true, tension: 0.3, pointRadius: 3, borderDash: [4,3], hidden: chartHidden[5] },
+        { label: 'Shared services net to Thrive',      data: ssCumNet,           borderColor: '#C026D3', backgroundColor: 'rgba(192,38,211,0.08)', fill: true, tension: 0.3, pointRadius: 3, borderDash: [2,3], hidden: chartHidden[6] },
+      ]},
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v + 'M' } }, x: { grid: { display: false } } } }
+    });
+  } else {
+    // Per-year stacked bar view
+    const annualEquity = equityByYear.map((v, i) => Math.round((i === 0 ? v : v - equityByYear[i - 1]) * 10) / 10);
+    const annualInv    = Array.from({ length: horizonYrs }, (_, i) => i < yrs ? Math.round(invY * 10) / 10 : 0);
+
+    // Custom plugin: draw active company count above each stacked bar
+    const activeCoLabels = _activeCompaniesArr.slice(0, horizonYrs);
+    const activeCompaniesPlugin = {
+      id: 'activeCoLabels',
+      afterDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        const barMeta = chart.getDatasetMeta(0);  // first stacked dataset drives bar positions
+        ctx.save();
+        ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        ctx.fillStyle = '#6b6b63';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        barMeta.data.forEach((bar, i) => {
+          const raw = activeCoLabels[i] || 0;
+          const lo = Math.floor(raw), hi = Math.ceil(raw);
+          const label = lo === hi ? lo + ' co.' : lo + '–' + hi + ' co.';
+          // find top of stack: min y across all bar datasets at this index
+          let topY = bar.y;
+          chart.data.datasets.forEach((ds, di) => {
+            if (ds.stack === 'income') {
+              const m = chart.getDatasetMeta(di);
+              if (m.data[i]) topY = Math.min(topY, m.data[i].y);
+            }
+          });
+          ctx.fillText(label, bar.x, topY - 4);
+        });
+        ctx.restore();
+      }
+    };
+
+    c1 = new Chart(el('chart1'), {
+      type: 'bar',
+      data: { labels, datasets: [
+        { label: DATASETS[1].label,                data: annualRoyalties, backgroundColor: '#1D9E75', borderRadius: 2, stack: 'income' },
+        { label: 'Realized equity (exits)',         data: annualEquity,    backgroundColor: '#534AB7', borderRadius: 2, stack: 'income' },
+        { label: 'Shared services net to Thrive',  data: ssAnnualNet,     backgroundColor: '#C026D3', borderRadius: 2, stack: 'income' },
+        { label: 'Annual investment', type: 'line', data: annualInv,      borderColor: '#E24B4A', backgroundColor: 'transparent', pointRadius: 3, tension: 0.2, borderWidth: 2 },
+      ]},
+      plugins: [activeCompaniesPlugin],
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, stacked: true },
+          y: { beginAtZero: true, stacked: true, ticks: { callback: v => '$' + v + 'M' } }
+        }
+      }
+    });
+  }
+  renderLegend();
 }
 
 function royaltyForVenture(rev, mode) {
@@ -550,7 +656,7 @@ function calc() {
     cumInvestment.push(cumI);
     equityByYear.push(eqAtY);
     unrealizedEqByYear.push(unrealizedEqAtY);
-    totalByYear.push(Math.round((cumR + eqAtY) * 10) / 10);
+    totalByYear.push(Math.round((cumR + eqAtY + cumSS) * 10) / 10);
   }
 
   _eqRealized        = equityByYear[horizonYrs - 1];
@@ -602,23 +708,10 @@ function calc() {
   hyp += '<div class="hyp-item"><b>' + Math.round(liqP * 100) + '%</b> of ventures exit between yr ' + exitMinY + '–' + exitMaxY + ' at ~$' + Math.round(exitV) + 'M avg</div>';
   el('hypBox').innerHTML = '<div style="font-size:14px;font-weight:500;margin:0 0 8px;color:var(--color-text-primary);">Current hypotheses</div>' + hyp;
 
-  // Chart 1 — cumulative flows
-  if (c1) c1.destroy();
-  const labels1 = Array.from({ length: horizonYrs }, (_, i) => 'Yr ' + (i + 1));
-  c1 = new Chart(el('chart1'), {
-    type: 'line',
-    data: { labels: labels1, datasets: [
-      { label: 'Cumulative investment',    data: cumInvestment,    borderColor: '#E24B4A', backgroundColor: 'rgba(226,75,74,0.08)',   fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[0] },
-      { label: 'Cumulative royalty',       data: cumRoyalties,     borderColor: '#1D9E75', backgroundColor: 'rgba(29,158,117,0.08)',  fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[1] },
-      { label: 'Realized equity (exits)',  data: equityByYear,     borderColor: '#534AB7', backgroundColor: 'rgba(83,74,183,0.08)',   fill: true, tension: 0.3, pointRadius: 3, borderDash: [5,4], hidden: chartHidden[2] },
-      { label: 'Unrealized equity (paper)',      data: unrealizedEqByYear, borderColor: '#0891B2', backgroundColor: 'rgba(8,145,178,0.08)',   fill: true, tension: 0.3, pointRadius: 3, borderDash: [3,3], hidden: chartHidden[3] },
-      { label: 'Total incubator value',          data: totalByYear,        borderColor: '#D97706', backgroundColor: 'rgba(217,119,6,0.08)',   fill: true, tension: 0.3, pointRadius: 3, hidden: chartHidden[4] },
-      { label: 'Shared services (total billed)', data: ssCumBilled,        borderColor: '#9333EA', backgroundColor: 'rgba(147,51,234,0.08)', fill: true, tension: 0.3, pointRadius: 3, borderDash: [4,3], hidden: chartHidden[5] },
-      { label: 'Shared services (net to Thrive)',data: ssCumNet,           borderColor: '#C026D3', backgroundColor: 'rgba(192,38,211,0.08)', fill: true, tension: 0.3, pointRadius: 3, borderDash: [2,3], hidden: chartHidden[6] },
-    ]},
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + v + 'M' } }, x: { grid: { display: false } } } }
-  });
-  renderLegend();
+  // Chart 1 — store data and render
+  _chart1Data = { cumRoyalties, cumInvestment, equityByYear, unrealizedEqByYear, totalByYear,
+                  ssCumBilled, ssCumNet, annualRoyalties, ssAnnualNet, invY, yrs, horizonYrs };
+  renderChart1();
 
   // Chart 2 — revenue distribution
   if (c2) c2.destroy();
@@ -793,13 +886,15 @@ function calcRunway() {
     runningBal = runningBal - annualOut + annualIn;
     minRaiseNeeded = Math.max(minRaiseNeeded, -runningBal);
   }
-  const buffer = parseInt(el('safetyBuffer').value) / 100;
-  el('safetyBufferVal').textContent = Math.round(buffer * 100) + '%';
-  const minRaiseWithBuffer = minRaiseNeeded * (1 + buffer);
-  const effectiveRaise = raise * (1 - buffer);
+  const bufferMonths = parseInt(el('safetyBuffer').value) || 0;
+  const bufferAmt = bufferMonths > 0 ? invY * (bufferMonths / 12) : 0;
+  el('safetyBufferVal').textContent = bufferMonths > 0 ? '= ' + fmtM(bufferAmt) + ' set aside' : '';
+  const minRaiseWithBuffer = minRaiseNeeded + bufferAmt;
+  const effectiveRaise = raise - bufferAmt;
   const raiseCoversAll = raise >= minRaiseWithBuffer;
   el('runwayMinNeeded').textContent = fmtM(minRaiseWithBuffer);
   el('runwayMinNeeded').style.color = raiseCoversAll ? 'var(--color-text-success)' : 'var(--color-text-danger)';
+  el('runwayEffective').textContent = bufferMonths > 0 ? '(' + fmtM(effectiveRaise) + ' effective)' : '';
 
   // Year-by-year cash balance: spend invY each year (while in investment period),
   // earn annual royalty/dividend + SS net profit back
@@ -819,7 +914,6 @@ function calcRunway() {
 
   el('runwayYrs').textContent = survived ? '10+ yrs ✓' : (actualRunway + ' yr' + (actualRunway !== 1 ? 's' : ''));
   el('runwayYrs').style.color = survived ? 'var(--color-text-success)' : '#534AB7';
-  el('runwayEffective').textContent = buffer > 0 ? '(' + fmtM(effectiveRaise) + ' effective)' : '';
 
   const idx = Math.max(Math.min(actualRunway, 10) - 1, 0);
   // Active companies: show as integer range
@@ -872,6 +966,6 @@ el('rampMode').addEventListener('change', calc);
 el('ssMode').addEventListener('change', calc);
 el('ssSubtract').addEventListener('change', calc);
 el('raiseInput').addEventListener('input', calcRunway);
-el('safetyBuffer').addEventListener('input', calcRunway);
+el('safetyBuffer').addEventListener('change', calcRunway);
 el('distModal').addEventListener('click', e => { if (e.target === el('distModal')) closeDistModal(); });
 applyPreset('likely');
