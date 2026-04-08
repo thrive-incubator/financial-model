@@ -215,9 +215,9 @@ function runScenario(p, divOpts) {
       const ramp = rampFn(age, matY, rampMode);
       const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
       if (divOpts) {
-        // margin ramps from 0 in year 1, reaching target at maturity (shifted by 1)
-        const marginRamp = rampFn(age - 1, matY, rampMode);
-        yRoy += avgRoy * cohortSurvivors * ramp * marginRamp * postGrowth;
+        // margin ramps to target at maturity then plateaus; revenue still grows post-maturity
+        const marginRamp = Math.pow(Math.min((age - 1) / Math.max(matY - 1, 1), 1), 1/3);
+        yRoy += avgRoy * cohortSurvivors * ramp * postGrowth * marginRamp;
       } else {
         yRoy += avgRoy * cohortSurvivors * ramp * postGrowth;
       }
@@ -608,9 +608,9 @@ function calc() {
       const ramp       = rampFn(age, matY, rampMode);
       const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
       if (modelMode === 'dividend') {
-        // margin ramps from 0 in year 1, reaching target at maturity (shifted by 1)
-        const marginRamp = rampFn(age - 1, matY, rampMode);
-        yRoy += avgRoyPerVenture * cohortSurvivors * ramp * marginRamp * postGrowth;
+        // margin ramps to target at maturity then plateaus; revenue still grows post-maturity
+        const marginRamp = Math.pow(Math.min((age - 1) / Math.max(matY - 1, 1), 1), 1/3);
+        yRoy += avgRoyPerVenture * cohortSurvivors * ramp * postGrowth * marginRamp;
       } else {
         yRoy += avgRoyPerVenture * cohortSurvivors * ramp * postGrowth;
       }
@@ -789,11 +789,11 @@ function buildDividendChart() {
   for (let age = 1; age <= 10; age++) {
     labels.push('Yr ' + age);
     const ramp = rampFn(age, matY, rampMode);
-    const marginRamp = rampFn(age - 1, matY, rampMode);  // starts at 0 in year 1
+    const marginRamp = Math.pow(Math.min((age - 1) / Math.max(matY - 1, 1), 1), 1/3);
     const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
     const dividend = medR * ramp * postGrowth * (divMargin * marginRamp) * divPayout * divOwn;
     data.push(Math.round(dividend * 1000) / 1000);
-    marginData.push(Math.round(divMargin * marginRamp * postGrowth * 1000) / 10);  // in %
+    marginData.push(Math.round(divMargin * marginRamp * 1000) / 10);  // plateaus, no postGrowth
   }
 
   const ctx = el('divChart');
