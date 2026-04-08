@@ -897,26 +897,50 @@ function calcRunway() {
   el('runwayMinNeeded').style.color = raiseCoversAll ? 'var(--color-text-success)' : 'var(--color-text-danger)';
   el('runwayEffective').textContent = bufferMonths > 0 ? '(' + fmtM(effectiveRaise) + ' effective)' : '';
 
-  // Year-by-year cash balance: spend invY each year (while in investment period),
-  // earn annual royalty/dividend + SS net profit back
-  let balance = effectiveRaise;
-  let actualRunway = 10;
-  let survived = true;
-  for (let y = 1; y <= 10; y++) {
-    const annualOut = y <= yrs ? invY : 0;
-    const annualIn  = (_annualRoyalties[y - 1] || 0) + (_ssAnnualNetArr[y - 1] || 0);
-    balance = balance - annualOut + annualIn;
-    if (balance < 0) {
-      actualRunway = y - 1;
-      survived = false;
-      break;
+  // Helper: compute fractional runway given a starting balance, returns decimal years (max 10)
+  function computeRunway(startBal) {
+    let bal = startBal;
+    for (let y = 1; y <= 10; y++) {
+      const annualOut = y <= yrs ? invY : 0;
+      const annualIn  = (_annualRoyalties[y - 1] || 0) + (_ssAnnualNetArr[y - 1] || 0);
+      const netChange = annualIn - annualOut;
+      const newBal = bal + netChange;
+      if (newBal < 0) {
+        // interpolate within this year: how far through the year does cash run out?
+        const fraction = bal / (annualOut - annualIn);  // fraction of year before zero
+        return (y - 1) + Math.max(0, Math.min(1, fraction));
+      }
+      bal = newBal;
     }
+    return 10; // survived
   }
 
-  el('runwayYrs').textContent = survived ? '10+ yrs ✓' : (actualRunway + ' yr' + (actualRunway !== 1 ? 's' : ''));
+  function fmtRunway(decimalYrs) {
+    if (decimalYrs >= 10) return '10+ yrs ✓';
+    const totalMonths = Math.round(decimalYrs * 12);
+    const yr  = Math.floor(totalMonths / 12);
+    const mo  = totalMonths % 12;
+    const parts = [];
+    if (yr > 0) parts.push(yr + ' yr' + (yr !== 1 ? 's' : ''));
+    if (mo > 0) parts.push(mo + ' mo');
+    return parts.join(' ') || '< 1 mo';
+  }
+
+  // Runway on effective capital (excluding buffer)
+  const effectiveRunway = computeRunway(effectiveRaise);
+  // Full runway including buffer (buffer is the emergency reserve — used last)
+  const fullRunway = computeRunway(raise);
+  const survived = fullRunway >= 10;
+
+  const actualRunway = Math.floor(effectiveRunway); // whole years for metric card lookup
+
+  el('runwayYrs').innerHTML = fmtRunway(effectiveRunway) +
+    (bufferMonths > 0 && fullRunway > effectiveRunway
+      ? '<span style="font-size:11px;font-weight:400;color:var(--color-text-secondary);margin-left:6px;">+ ' + fmtRunway(fullRunway - effectiveRunway) + ' on buffer → ' + fmtRunway(fullRunway) + ' total</span>'
+      : '');
   el('runwayYrs').style.color = survived ? 'var(--color-text-success)' : '#534AB7';
 
-  const idx = Math.max(Math.min(actualRunway, 10) - 1, 0);
+  const idx = Math.max(Math.min(Math.floor(effectiveRunway), 10) - 1, 0);
   // Active companies: show as integer range
   const acR = _activeCompaniesArr[idx] || 0;
   const acLow = Math.floor(acR), acHigh = Math.ceil(acR);
