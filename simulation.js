@@ -528,6 +528,7 @@ function calc() {
   const term = modelMode === 'royalty' ? 'royalty' : 'dividend';
   el('m1label').textContent = 'Annual ' + term + ' income (steady state)';
   el('m2label').textContent = 'Cumulative ' + term + ' (10 yr)';
+  el('m4label').textContent = 'Total return (' + term + ' + equity)';
   el('returnStructureTitle').textContent = modelMode === 'royalty' ? 'Royalty structure' : 'Dividend structure';
 
   // Simulation
