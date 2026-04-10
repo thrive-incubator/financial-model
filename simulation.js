@@ -139,18 +139,32 @@ const PRESETS = {
     spY:1, yrs:10, survR:60, invY:1, medR:3, sig:1.0, matY:6,
     royMode:'flat', thresh:500, flatR:3, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
     eqT:5, eqO:3, antiD:'none', dil:70, liq:5, exitV:20, exitMinY:8, exitMaxY:13, revMult:2, rampMode:'scurve', growthR:0,
+    ssMode:'fixed', ssCost:80,  ssPct:2, ssMarkup:10, ssSubtract:'no',
+    divOwn:20, divMargin:25, divPayout:50,
   },
   likely: {
     spY:2, yrs:10, survR:80, invY:1, medR:4, sig:0.5, matY:5,
     royMode:'flat', thresh:500, flatR:5, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
     eqT:10, eqO:5, antiD:'A', dil:60, liq:10, exitV:30, exitMinY:7, exitMaxY:12, revMult:3, rampMode:'scurve', growthR:3,
+    ssMode:'fixed', ssCost:100, ssPct:2, ssMarkup:20, ssSubtract:'net',
+    divOwn:25, divMargin:35, divPayout:60,
   },
   bull: {
     spY:2, yrs:10, survR:80, invY:1, medR:7, sig:0.7, matY:4,
     royMode:'flat', thresh:500, flatR:7, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
     eqT:15, eqO:5, antiD:'B', dil:50, liq:20, exitV:50, exitMinY:6, exitMaxY:10, revMult:5, rampMode:'scurve', growthR:7,
+    ssMode:'fixed', ssCost:120, ssPct:2, ssMarkup:30, ssSubtract:'net',
+    divOwn:30, divMargin:45, divPayout:70,
   },
 };
+
+// Per-preset live state — remembers user's tweaks per preset independently
+const presetState = {
+  bear:   { ...PRESETS.bear },
+  likely: { ...PRESETS.likely },
+  bull:   { ...PRESETS.bull },
+};
+let activePreset = 'likely';
 
 function runScenario(p, divOpts) {
   const spY = p.spY, yrs = p.yrs, survR = p.survR / 100, invY = p.invY;
@@ -233,7 +247,7 @@ function runScenario(p, divOpts) {
 }
 
 function applyPreset(name) {
-  const p = PRESETS[name];
+  const p = presetState[name];
   const setV = (id, v) => { const e = el(id); if (e) e.value = v; };
   setV('spY', p.spY); setV('yrs', p.yrs); setV('surv', p.survR); setV('inv', p.invY);
   setV('medR', p.medR); setV('sig', p.sig); setV('matY', p.matY);
@@ -248,10 +262,51 @@ function applyPreset(name) {
   el('royMode').value = p.royMode;
   el('rampMode').value = p.rampMode || 'scurve';
   setV('growthR', p.growthR || 0);
+  el('ssMode').value     = p.ssMode    || 'fixed';
+  setV('ssCost',   p.ssCost   ?? 100);
+  setV('ssPct',    p.ssPct    ?? 2);
+  setV('ssMarkup', p.ssMarkup ?? 20);
+  el('ssSubtract').value = p.ssSubtract || 'no';
+  setV('divOwn',    p.divOwn    ?? 25);
+  setV('divMargin', p.divMargin ?? 35);
+  setV('divPayout', p.divPayout ?? 60);
+  activePreset = name;
   document.querySelectorAll('.preset-btn[data-preset]').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector('.preset-btn[data-preset="' + name + '"]');
   if (btn) btn.classList.add('active');
   calc();
+}
+
+function snapshotPreset() {
+  if (!activePreset) return;
+  presetState[activePreset] = {
+    spY: parseFloat(el('spY').value), yrs: parseInt(el('yrs').value),
+    survR: parseInt(el('surv').value), invY: parseFloat(el('inv').value),
+    medR: parseFloat(el('medR').value), sig: parseFloat(el('sig').value),
+    matY: parseInt(el('matY').value),
+    royMode: el('royMode').value, thresh: parseFloat(el('thresh').value),
+    flatR: parseFloat(el('flatR').value),
+    g1r: parseFloat(el('g1r').value), g2r: parseFloat(el('g2r').value), g3r: parseFloat(el('g3r').value),
+    capR: parseFloat(el('capR').value), capMax: parseFloat(el('capMax').value),
+    eqT: parseInt(el('eqT').value), eqO: parseInt(el('eqO').value),
+    antiD: el('antiD').value,
+    dil: parseInt(el('dil').value), liq: parseInt(el('liq').value),
+    exitV: parseFloat(el('exitV').value),
+    exitMinY: parseInt(el('exitMinY').value), exitMaxY: parseInt(el('exitMaxY').value),
+    revMult: parseFloat(el('revMult').value),
+    rampMode: el('rampMode').value, growthR: parseInt(el('growthR').value),
+    ssMode: el('ssMode').value,
+    ssCost: parseFloat(el('ssCost').value), ssPct: parseFloat(el('ssPct').value),
+    ssMarkup: parseFloat(el('ssMarkup').value), ssSubtract: el('ssSubtract').value,
+    divOwn: parseFloat(el('divOwn').value), divMargin: parseFloat(el('divMargin').value),
+    divPayout: parseFloat(el('divPayout').value),
+  };
+}
+
+function resetPreset() {
+  if (!activePreset) return;
+  presetState[activePreset] = { ...PRESETS[activePreset] };
+  applyPreset(activePreset);
 }
 
 function buildScenarioChart() {
@@ -262,9 +317,9 @@ function buildScenarioChart() {
   } : null;
   const term = modelMode === 'royalty' ? 'royalty' : 'dividend';
   el('scenarioChartTitle').textContent = 'Scenario comparison — investment vs. ' + term;
-  const bear   = runScenario(PRESETS.bear, divOpts);
-  const likely = runScenario(PRESETS.likely, divOpts);
-  const bull   = runScenario(PRESETS.bull, divOpts);
+  const bear   = runScenario(presetState.bear, divOpts);
+  const likely = runScenario(presetState.likely, divOpts);
+  const bull   = runScenario(presetState.bull, divOpts);
   const labels = Array.from({ length: 10 }, (_, i) => 'Yr ' + (i + 1));
   if (c3) c3.destroy();
   c3 = new Chart(el('chart3'), {
@@ -452,6 +507,7 @@ function royaltyForVenture(rev, mode) {
 }
 
 function calc() {
+  snapshotPreset();
   const spY    = parseFloat(el('spY').value);
   const yrs    = parseInt(el('yrs').value);
   const survR  = parseInt(el('surv').value) / 100;
