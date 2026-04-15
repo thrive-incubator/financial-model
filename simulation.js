@@ -33,7 +33,7 @@ let _chart1Data = null;
 let _eqAllTime = 0, _eqRealized = 0, _showAllEq = false;
 let _cumRoyalties = [], _equityByYear = [], _cumInvestment = [], _invM = 0, _horizonYrs = 10;
 let _annualRoyalties = [], _ssAnnualNetArr = [], _ssAnnualBilledArr = [], _ssCumNetArr = [], _ssCumBilledArr = [], _activeCompaniesArr = [];
-let modelMode = 'royalty';
+let modelMode = 'dividend';
 
 function updateEqCards() {
   const eq10    = _showAllEq ? _eqAllTime  : _eqRealized;
@@ -143,16 +143,16 @@ const PRESETS = {
     divOwn:20, divMargin:25, divPayout:50,
   },
   likely: {
-    spY:2, yrs:10, survR:80, invY:1, medR:4, sig:0.5, matY:5,
+    spY:2, yrs:10, survR:70, invY:1, medR:4, sig:0.4, matY:5,
     royMode:'flat', thresh:500, flatR:5, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
-    eqT:10, eqO:5, antiD:'A', dil:60, liq:10, exitV:30, exitMinY:7, exitMaxY:12, revMult:3, rampMode:'scurve', growthR:3,
+    eqT:10, eqO:5, antiD:'A', dil:60, liq:10, exitV:30, exitMinY:7, exitMaxY:12, revMult:3, rampMode:'scurve', growthR:5,
     ssMode:'fixed', ssCost:100, ssPct:2, ssMarkup:20, ssSubtract:'net',
-    divOwn:25, divMargin:35, divPayout:60,
+    divOwn:25, divMargin:40, divPayout:60,
   },
   bull: {
-    spY:2, yrs:10, survR:80, invY:1, medR:7, sig:0.7, matY:4,
+    spY:2, yrs:10, survR:75, invY:1, medR:6, sig:0.7, matY:4,
     royMode:'flat', thresh:500, flatR:7, g1r:3, g2r:5, g3r:7, capR:5, capMax:3,
-    eqT:15, eqO:5, antiD:'B', dil:50, liq:20, exitV:50, exitMinY:6, exitMaxY:10, revMult:5, rampMode:'scurve', growthR:7,
+    eqT:15, eqO:5, antiD:'B', dil:50, liq:20, exitV:50, exitMinY:6, exitMaxY:10, revMult:5, rampMode:'scurve', growthR:8,
     ssMode:'fixed', ssCost:120, ssPct:2, ssMarkup:30, ssSubtract:'net',
     divOwn:30, divMargin:45, divPayout:70,
   },
@@ -310,16 +310,14 @@ function resetPreset() {
 }
 
 function buildScenarioChart() {
-  const divOpts = modelMode === 'dividend' ? {
-    ownership: parseFloat(el('divOwn').value) / 100,
-    margin:    parseFloat(el('divMargin').value) / 100,
-    payout:    parseFloat(el('divPayout').value) / 100,
-  } : null;
+  function divOptsFor(p) {
+    return modelMode === 'dividend' ? { ownership: p.divOwn / 100, margin: p.divMargin / 100, payout: p.divPayout / 100 } : null;
+  }
   const term = modelMode === 'royalty' ? 'royalty' : 'dividend';
   el('scenarioChartTitle').textContent = 'Scenario comparison — investment vs. ' + term;
-  const bear   = runScenario(presetState.bear, divOpts);
-  const likely = runScenario(presetState.likely, divOpts);
-  const bull   = runScenario(presetState.bull, divOpts);
+  const bear   = runScenario(presetState.bear,   divOptsFor(presetState.bear));
+  const likely = runScenario(presetState.likely,  divOptsFor(presetState.likely));
+  const bull   = runScenario(presetState.bull,    divOptsFor(presetState.bull));
   const labels = Array.from({ length: 10 }, (_, i) => 'Yr ' + (i + 1));
   if (c3) c3.destroy();
   c3 = new Chart(el('chart3'), {
@@ -1050,3 +1048,4 @@ el('raiseInput').addEventListener('input', calcRunway);
 el('safetyBuffer').addEventListener('change', calcRunway);
 el('distModal').addEventListener('click', e => { if (e.target === el('distModal')) closeDistModal(); });
 applyPreset('likely');
+setModelMode('dividend');

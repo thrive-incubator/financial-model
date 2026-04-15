@@ -21,7 +21,7 @@
         1 spin-out/yr · 60% survival · $3M median revenue · 6 yrs to maturity<br>
         3% royalty · 5% Thrive equity · no anti-dilution · 5% liquidity at $20M exit<br><br>
         <b>Likely / Default</b><br>
-        2 spin-outs/yr · 80% survival · $4M median revenue · 5 yrs to maturity<br>
+        2 spin-outs/yr · 70% survival · $4M median revenue · 5 yrs to maturity<br>
         5% royalty · 10% Thrive equity · Series A anti-dilution · 10% liquidity at $30M exit<br><br>
         <b>Bull / Optimistic</b><br>
         2 spin-outs/yr · 80% survival · $7M median revenue · 4 yrs to maturity<br>
@@ -32,8 +32,8 @@
 
   <div style="display:flex;gap:8px;margin:0 0 1.5rem;align-items:center;">
     <span style="font-size:13px;color:var(--color-text-secondary);">Return model:</span>
-    <button id="modeRoyaltyBtn" class="preset-btn active" onclick="setModelMode('royalty')" style="padding:4px 10px;font-size:12px;">Royalty</button>
-    <button id="modeDividendBtn" class="preset-btn" onclick="setModelMode('dividend')" style="padding:4px 10px;font-size:12px;">Dividend</button>
+    <button id="modeRoyaltyBtn" class="preset-btn" onclick="setModelMode('royalty')" style="padding:4px 10px;font-size:12px;">Royalty</button>
+    <button id="modeDividendBtn" class="preset-btn active" onclick="setModelMode('dividend')" style="padding:4px 10px;font-size:12px;">Dividend</button>
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 1.5rem;" id="metrics">
@@ -108,7 +108,7 @@
     <div class="sec-title">Portfolio parameters</div>
     <div class="row"><span class="lbl">Spin-outs per year</span><input type="range" min="0.5" max="5" step="0.5" value="2" id="spY" style="flex:1;"><span class="val" id="spYo">2</span></div>
     <div class="row"><span class="lbl">Years of operation</span><input type="range" min="3" max="10" step="1" value="10" id="yrs" style="flex:1;"><span class="val" id="yrso">10</span></div>
-    <div class="row"><span class="lbl">Survival rate (%)</span><input type="range" min="50" max="95" step="5" value="80" id="surv" style="flex:1;"><span class="val" id="survo">80%</span></div>
+    <div class="row"><span class="lbl">Survival rate (%)</span><input type="range" min="50" max="95" step="5" value="70" id="surv" style="flex:1;"><span class="val" id="survo">70%</span></div>
     <div class="row"><span class="lbl">Yearly investment ($M)</span><input type="range" min="0.5" max="2" step="0.1" value="1" id="inv" style="flex:1;"><span class="val" id="invo">$1M/yr</span></div>
   </div>
 
@@ -136,7 +136,7 @@
   <div class="sec">
     <div class="sec-title">Revenue distribution (lognormal) <span class="info-icon" tabindex="0" onclick="openDistModal()" style="cursor:pointer;font-style:normal;">ⓘ</span></div>
     <div class="row"><span class="lbl">Median revenue ($M)</span><input type="range" min="1" max="15" step="0.5" value="4" id="medR" style="flex:1;"><span class="val" id="medRo">$4M</span></div>
-    <div class="row"><span class="lbl">Spread (higher = more variance)</span><input type="range" min="0" max="1" step="0.1" value="0.5" id="sig" style="flex:1;"><span class="val" id="sigo">0.8</span></div>
+    <div class="row"><span class="lbl">Spread (higher = more variance)</span><input type="range" min="0" max="1" step="0.1" value="0.4" id="sig" style="flex:1;"><span class="val" id="sigo">0.4</span></div>
     <div class="row"><span class="lbl">Years to maturity</span><input type="range" min="2" max="7" step="1" value="5" id="matY" style="flex:1;"><span class="val" id="matYo">5</span></div>
     <div class="row"><span class="lbl">Growth curve</span>
       <select id="rampMode" style="flex:1;">
@@ -146,7 +146,7 @@
         <option value="concave">Concave (SaaS)</option>
       </select>
     </div>
-    <div class="row"><span class="lbl">Post-maturity growth (%/yr)</span><input type="range" min="0" max="20" step="1" value="0" id="growthR" style="flex:1;"><span class="val" id="growthRo">0%</span></div>
+    <div class="row"><span class="lbl">Post-maturity growth (%/yr)</span><input type="range" min="0" max="20" step="1" value="5" id="growthR" style="flex:1;"><span class="val" id="growthRo">5%</span></div>
     <div id="distDesc" style="font-size:12px;color:var(--color-text-secondary);margin:4px 0 0;"></div>
   </div>
 
@@ -172,12 +172,12 @@
 
   <div class="sec">
     <div class="sec-title" style="display:flex;align-items:center;gap:6px;">
-      <span id="returnStructureTitle">Royalty structure</span>
-      <span id="divInfoBtn" class="info-icon" tabindex="0" onclick="openDividendModal()" style="cursor:pointer;font-style:normal;display:none;">ⓘ</span>
+      <span id="returnStructureTitle">Dividend structure</span>
+      <span id="divInfoBtn" class="info-icon" tabindex="0" onclick="openDividendModal()" style="cursor:pointer;font-style:normal;">ⓘ</span>
     </div>
 
     <!-- Royalty parameters -->
-    <div id="royaltyContent">
+    <div id="royaltyContent" style="display:none;">
       <div class="row"><span class="lbl">Mode</span>
         <select id="royMode" style="flex:1;">
           <option value="flat">Flat rate</option>
@@ -204,16 +204,16 @@
     </div>
 
     <!-- Dividend parameters (shown in dividend mode) -->
-    <div id="dividendContent" style="display:none;">
+    <div id="dividendContent">
       <div class="row"><span class="lbl">Thrive ownership (%)</span><input type="range" min="5" max="50" step="1" value="25" id="divOwn" style="flex:1;"><span class="val" id="divOwno">25%</span></div>
-      <div class="row"><span class="lbl">Profit margin at maturity (%)</span><input type="range" min="10" max="80" step="5" value="35" id="divMargin" style="flex:1;"><span class="val" id="divMargino">35%</span></div>
+      <div class="row"><span class="lbl">Profit margin at maturity (%)</span><input type="range" min="10" max="80" step="5" value="40" id="divMargin" style="flex:1;"><span class="val" id="divMargino">40%</span></div>
       <div class="row"><span class="lbl">Dividend payout ratio (%)</span><input type="range" min="20" max="100" step="5" value="60" id="divPayout" style="flex:1;"><span class="val" id="divPayouto">60%</span></div>
     </div>
   </div>
 
   <div class="sec">
     <div class="sec-title">Equity structure</div>
-    <div class="row" id="eqTRow"><span class="lbl">Thrive equity (%)</span><input type="range" min="0" max="50" step="1" value="10" id="eqT" style="flex:1;"><span class="val" id="eqTo">10%</span></div>
+    <div class="row" id="eqTRow" style="opacity:0.4;pointer-events:none;"><span class="lbl">Thrive equity (%)</span><input type="range" min="0" max="50" step="1" value="25" id="eqT" style="flex:1;"><span class="val" id="eqTo">25%</span></div>
     <div class="row"><span class="lbl">GU OTC equity (%)</span><input type="range" min="0" max="10" step="1" value="5" id="eqO" style="flex:1;"><span class="val" id="eqOo">5%</span></div>
     <div class="row"><span class="lbl">Anti-dilution through</span>
       <select id="antiD" style="flex:1;">
