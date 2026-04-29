@@ -12,7 +12,8 @@ function boxMuller(i) {
   return Math.sqrt(-2 * Math.log(u1 + 0.001)) * Math.cos(2 * Math.PI * u2);
 }
 
-const ids = ['spY', 'yrs', 'surv', 'inv', 'medR', 'sig', 'matY', 'thresh', 'flatR', 'g1r', 'g2r', 'g3r', 'capR', 'capMax', 'eqT', 'eqO', 'dil', 'liq', 'exitV', 'exitMinY', 'exitMaxY', 'revMult', 'growthR', 'ssCost', 'ssPct', 'ssMarkup', 'divOwn', 'divMargin', 'divPayout'];
+const ids = ['spY', 'yrs', 'surv', 'inv', 'medR', 'sig', 'matY', 'thresh', 'flatR', 'g1r', 'g2r', 'g3r', 'capR', 'capMax', 'eqT', 'eqO', 'dil', 'liq', 'exitV', 'exitMinY', 'exitMaxY', 'revMult', 'growthR', 'ssCost', 'ssPct', 'ssMarkup', 'divOwn', 'divMargin', 'divPayout',
+  'hybUpfront', 'hybFC', 'hybRate', 'hybGrace', 'hybCap1', 'hybCap2', 'hybCap3', 'hybExpY', 'hybTail'];
 
 // Returns 0→1 ramp value for a venture of given age, over matY years
 function rampFn(age, matY, mode) {
@@ -141,6 +142,7 @@ const PRESETS = {
     eqT:5, eqO:3, antiD:'none', dil:70, liq:5, exitV:20, exitMinY:8, exitMaxY:13, revMult:2, rampMode:'scurve', growthR:0,
     ssMode:'fixed', ssCost:80,  ssPct:2, ssMarkup:10, ssSubtract:'no',
     divOwn:20, divMargin:25, divPayout:50,
+    hybUpfront:30, hybFC:5,   hybRate:18, hybGrace:24, hybCap1:1.5, hybCap2:2.0, hybCap3:2.5, hybExpY:8, hybTail:10,
   },
   likely: {
     spY:2, yrs:10, survR:70, invY:1, medR:4, sig:0.4, matY:5,
@@ -148,6 +150,7 @@ const PRESETS = {
     eqT:10, eqO:5, antiD:'A', dil:60, liq:10, exitV:30, exitMinY:7, exitMaxY:12, revMult:3, rampMode:'scurve', growthR:5,
     ssMode:'fixed', ssCost:100, ssPct:2, ssMarkup:20, ssSubtract:'net',
     divOwn:25, divMargin:40, divPayout:60,
+    hybUpfront:30, hybFC:7.5, hybRate:22, hybGrace:21, hybCap1:1.5, hybCap2:2.0, hybCap3:3.0, hybExpY:8, hybTail:10,
   },
   bull: {
     spY:2, yrs:10, survR:75, invY:1, medR:6, sig:0.7, matY:4,
@@ -155,6 +158,7 @@ const PRESETS = {
     eqT:15, eqO:5, antiD:'B', dil:50, liq:20, exitV:50, exitMinY:6, exitMaxY:10, revMult:5, rampMode:'scurve', growthR:8,
     ssMode:'fixed', ssCost:120, ssPct:2, ssMarkup:30, ssSubtract:'net',
     divOwn:30, divMargin:45, divPayout:70,
+    hybUpfront:30, hybFC:10,  hybRate:25, hybGrace:18, hybCap1:1.5, hybCap2:2.0, hybCap3:3.0, hybExpY:8, hybTail:10,
   },
 };
 
@@ -166,12 +170,13 @@ const presetState = {
 };
 let activePreset = 'likely';
 
-function runScenario(p, divOpts) {
+function runScenario(p, divOpts, hybOpts) {
   const spY = p.spY, yrs = p.yrs, survR = p.survR / 100, invY = p.invY;
   const medR = p.medR, sigma = p.sig, matY = p.matY;
   const mode = p.royMode, tM = p.thresh / 1000;
-  const eqT = p.eqT / 100, dilP = p.dil / 100, liqP = p.liq / 100;
+  const dilP = p.dil / 100, liqP = p.liq / 100;
   const exitV = p.exitV, antiD = p.antiD;
+  const eqT = (hybOpts ? hybOpts.upfront : p.eqT / 100);
   const SAMPLE_SIZE = 200, horizonYrs = 10;
   const totalV = spY * yrs;
   const survivors = Math.round(totalV * survR);
@@ -186,8 +191,10 @@ function runScenario(p, divOpts) {
   }
   const avgRevPerVenture = sampleTotalRev / SAMPLE_SIZE;
 
-  let avgRoy;
-  if (divOpts) {
+  let avgRoy = 0;
+  if (hybOpts) {
+    avgRoy = 0;  // computed per cohort below
+  } else if (divOpts) {
     avgRoy = avgRevPerVenture * divOpts.margin * divOpts.payout * divOpts.ownership;
   } else {
     let sampleTotalRoy = 0;
@@ -208,10 +215,10 @@ function runScenario(p, divOpts) {
     avgRoy = sampleTotalRoy / SAMPLE_SIZE;
   }
 
-  let effEq = eqT;
-  if (antiD === 'none')   effEq = eqT * (1 - dilP);
-  else if (antiD === 'A') effEq = eqT * (1 - dilP * 0.5);
-  else                    effEq = eqT * (1 - dilP * 0.25);
+  const dilFactor = antiD === 'none' ? 1 : antiD === 'A' ? 0.5 : 0.25;
+  const effEq    = eqT * (1 - dilP * dilFactor);
+  const effEqUp  = hybOpts ? hybOpts.upfront * (1 - dilP * dilFactor) : effEq;
+  const effEqRed = hybOpts ? hybOpts.tail    * (1 - dilP * dilFactor) : effEq;
 
   const cohortSurvivors = survivors / yrs;
   const rampMode  = p.rampMode || 'scurve';
@@ -220,28 +227,65 @@ function runScenario(p, divOpts) {
   const exitMaxY  = p.exitMaxY || 12;
   const windowLen = exitMaxY - exitMinY + 1;
   const cumRoyalties = [], cumInvestment = [], equityByYear = [];
-  let cumR = 0, cumExits = 0;
+  let cumR = 0, cumExits = 0, cumExitsActive = 0, cumExitsRedeemed = 0;
+
+  // Hybrid per-cohort state (unused if !hybOpts)
+  const cohortCumPaid = new Array(yrs).fill(0);
+  const cohortStatus  = new Array(yrs).fill('active');
+  const perVentureInv = spY > 0 ? invY / spY : invY;
+  const hybFinalCap = hybOpts ? Math.max(hybOpts.cap1, hybOpts.cap2, hybOpts.cap3) * perVentureInv : 0;
+  const capForAge = (age) => {
+    const mult = age <= 3 ? hybOpts.cap1 : age <= 5 ? hybOpts.cap2 : hybOpts.cap3;
+    return mult * perVentureInv;
+  };
 
   for (let y = 1; y <= horizonYrs; y++) {
-    let yRoy = 0, exitsThisYear = 0;
+    let yRoy = 0, exitsThisYear = 0, exitsActiveY = 0, exitsRedeemedY = 0;
     for (let c = 1; c <= Math.min(y, yrs); c++) {
       const age = y - c + 1;
+      const cohortIdx = c - 1;
       const ramp = rampFn(age, matY, rampMode);
       const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
-      if (divOpts) {
-        // margin ramps to target at maturity then plateaus; revenue still grows post-maturity
+      const exitsCohortY = (age >= exitMinY && age <= exitMaxY) ? cohortSurvivors * liqP / windowLen : 0;
+      if (hybOpts) {
+        if (cohortStatus[cohortIdx] === 'active' && age > hybOpts.expY) {
+          cohortStatus[cohortIdx] = 'expired';
+        }
+        if (cohortStatus[cohortIdx] === 'active' && age * 12 > hybOpts.graceMo) {
+          const marginRamp = Math.pow(Math.min((age - 1) / Math.max(matY - 1, 1), 1), 1/3);
+          const fePerVenture = avgRevPerVenture * ramp * postGrowth * (hybOpts.margin * marginRamp + hybOpts.fc);
+          let payment = Math.max(0, fePerVenture * hybOpts.rate);
+          const capTarget = capForAge(age);
+          const remaining = Math.max(0, capTarget - cohortCumPaid[cohortIdx]);
+          payment = Math.min(payment, remaining);
+          cohortCumPaid[cohortIdx] += payment;
+          yRoy += payment * cohortSurvivors;
+          if (cohortCumPaid[cohortIdx] >= hybFinalCap - 1e-9) {
+            cohortStatus[cohortIdx] = 'redeemed';
+          }
+        }
+        if (cohortStatus[cohortIdx] === 'redeemed') exitsRedeemedY += exitsCohortY;
+        else                                         exitsActiveY  += exitsCohortY;
+      } else if (divOpts) {
         const marginRamp = Math.pow(Math.min((age - 1) / Math.max(matY - 1, 1), 1), 1/3);
         yRoy += avgRoy * cohortSurvivors * ramp * postGrowth * marginRamp;
+        exitsThisYear += exitsCohortY;
       } else {
         yRoy += avgRoy * cohortSurvivors * ramp * postGrowth;
+        exitsThisYear += exitsCohortY;
       }
-      if (age >= exitMinY && age <= exitMaxY) exitsThisYear += cohortSurvivors * liqP / windowLen;
     }
     cumR += yRoy;
     cumExits += exitsThisYear;
+    cumExitsActive += exitsActiveY;
+    cumExitsRedeemed += exitsRedeemedY;
     cumRoyalties.push(Math.round(cumR * 10) / 10);
     cumInvestment.push(Math.round(Math.min(y, yrs) * invY * 10) / 10);
-    equityByYear.push(Math.round(cumExits * exitV * effEq * 10) / 10);
+    if (hybOpts) {
+      equityByYear.push(Math.round((cumExitsActive * exitV * effEqUp + cumExitsRedeemed * exitV * effEqRed) * 10) / 10);
+    } else {
+      equityByYear.push(Math.round(cumExits * exitV * effEq * 10) / 10);
+    }
   }
   return { cumRoyalties, cumInvestment, equityByYear };
 }
@@ -270,6 +314,15 @@ function applyPreset(name) {
   setV('divOwn',    p.divOwn    ?? 25);
   setV('divMargin', p.divMargin ?? 35);
   setV('divPayout', p.divPayout ?? 60);
+  setV('hybUpfront', p.hybUpfront ?? 30);
+  setV('hybFC',      p.hybFC      ?? 7.5);
+  setV('hybRate',    p.hybRate    ?? 22);
+  setV('hybGrace',   p.hybGrace   ?? 21);
+  setV('hybCap1',    p.hybCap1    ?? 1.5);
+  setV('hybCap2',    p.hybCap2    ?? 2.0);
+  setV('hybCap3',    p.hybCap3    ?? 3.0);
+  setV('hybExpY',    p.hybExpY    ?? 8);
+  setV('hybTail',    p.hybTail    ?? 10);
   activePreset = name;
   document.querySelectorAll('.preset-btn[data-preset]').forEach(b => b.classList.remove('active'));
   const btn = document.querySelector('.preset-btn[data-preset="' + name + '"]');
@@ -300,6 +353,15 @@ function snapshotPreset() {
     ssMarkup: parseFloat(el('ssMarkup').value), ssSubtract: el('ssSubtract').value,
     divOwn: parseFloat(el('divOwn').value), divMargin: parseFloat(el('divMargin').value),
     divPayout: parseFloat(el('divPayout').value),
+    hybUpfront: parseFloat(el('hybUpfront').value),
+    hybFC:      parseFloat(el('hybFC').value),
+    hybRate:    parseFloat(el('hybRate').value),
+    hybGrace:   parseFloat(el('hybGrace').value),
+    hybCap1:    parseFloat(el('hybCap1').value),
+    hybCap2:    parseFloat(el('hybCap2').value),
+    hybCap3:    parseFloat(el('hybCap3').value),
+    hybExpY:    parseInt(el('hybExpY').value),
+    hybTail:    parseFloat(el('hybTail').value),
   };
 }
 
@@ -313,11 +375,26 @@ function buildScenarioChart() {
   function divOptsFor(p) {
     return modelMode === 'dividend' ? { ownership: p.divOwn / 100, margin: p.divMargin / 100, payout: p.divPayout / 100 } : null;
   }
-  const term = modelMode === 'royalty' ? 'royalty' : 'dividend';
+  function hybOptsFor(p) {
+    if (modelMode !== 'hybrid') return null;
+    return {
+      upfront: (p.hybUpfront ?? 30) / 100,
+      tail:    (p.hybTail    ?? 10) / 100,
+      fc:      (p.hybFC      ?? 7.5) / 100,
+      rate:    (p.hybRate    ?? 22) / 100,
+      graceMo:  p.hybGrace   ?? 21,
+      cap1:     p.hybCap1    ?? 1.5,
+      cap2:     p.hybCap2    ?? 2.0,
+      cap3:     p.hybCap3    ?? 3.0,
+      expY:     p.hybExpY    ?? 8,
+      margin:  (p.divMargin  ?? 35) / 100,  // reuse profit margin slider as Founder Earnings base
+    };
+  }
+  const term = modelMode === 'royalty' ? 'royalty' : modelMode === 'dividend' ? 'dividend' : 'cash';
   el('scenarioChartTitle').textContent = 'Scenario comparison — investment vs. ' + term;
-  const bear   = runScenario(presetState.bear,   divOptsFor(presetState.bear));
-  const likely = runScenario(presetState.likely,  divOptsFor(presetState.likely));
-  const bull   = runScenario(presetState.bull,    divOptsFor(presetState.bull));
+  const bear   = runScenario(presetState.bear,   divOptsFor(presetState.bear),   hybOptsFor(presetState.bear));
+  const likely = runScenario(presetState.likely,  divOptsFor(presetState.likely), hybOptsFor(presetState.likely));
+  const bull   = runScenario(presetState.bull,    divOptsFor(presetState.bull),   hybOptsFor(presetState.bull));
   const labels = Array.from({ length: 10 }, (_, i) => 'Yr ' + (i + 1));
   if (c3) c3.destroy();
   c3 = new Chart(el('chart3'), {
@@ -362,11 +439,17 @@ const chartHidden = [false, false, false, true, true, true, true];
 
 function renderLegend() {
   // Keep label[1] in sync with model mode
-  DATASETS[1].label = modelMode === 'dividend' ? 'Cumulative dividend' : 'Cumulative royalty';
+  const cumLabel = modelMode === 'dividend' ? 'Cumulative dividend'
+                 : modelMode === 'hybrid'   ? 'Cumulative cash to Thrive'
+                 :                            'Cumulative royalty';
+  DATASETS[1].label = cumLabel;
 
   if (chart1View === 'annual') {
+    const annLabel = modelMode === 'dividend' ? 'Annual dividend'
+                   : modelMode === 'hybrid'   ? 'Annual cash to Thrive'
+                   :                            'Annual royalty';
     const items = [
-      { color: '#1D9E75', label: modelMode === 'dividend' ? 'Annual dividend' : 'Annual royalty' },
+      { color: '#1D9E75', label: annLabel },
       { color: '#534AB7', label: 'Realized equity (exits)' },
       { color: '#C026D3', label: 'Shared services net to Thrive' },
       { color: '#E24B4A', label: 'Annual investment' },
@@ -515,10 +598,13 @@ function calc() {
   const sigma  = parseFloat(el('sig').value);
   const matY   = parseInt(el('matY').value);
   const mode   = el('royMode').value;
-  // In dividend mode, equity stake is the same as dividend ownership
+  // Equity stake is overridden in dividend mode (= ownership) and hybrid mode (= upfront equity).
   let eqT = parseInt(el('eqT').value) / 100;
   if (modelMode === 'dividend') {
     eqT = parseFloat(el('divOwn').value) / 100;
+    el('eqT').value = Math.round(eqT * 100);
+  } else if (modelMode === 'hybrid') {
+    eqT = parseFloat(el('hybUpfront').value) / 100;
     el('eqT').value = Math.round(eqT * 100);
   }
   const eqO    = parseInt(el('eqO').value) / 100;
@@ -538,6 +624,19 @@ function calc() {
   const ssPct      = parseFloat(el('ssPct').value) / 100;
   const ssMarkup   = parseFloat(el('ssMarkup').value) / 100;
   const ssSubtract = el('ssSubtract').value;  // 'no' | 'net' | 'billed'
+  // Hybrid (term sheet) parameters
+  const hybUpfrontPct = parseFloat(el('hybUpfront').value) / 100;
+  const hybFCpct      = parseFloat(el('hybFC').value)      / 100;  // founder comp add-back as % of revenue
+  const hybRatePct    = parseFloat(el('hybRate').value)    / 100;  // payment rate on Founder Earnings
+  const hybGraceMo    = parseFloat(el('hybGrace').value);          // grace period in months
+  const hybCap1m      = parseFloat(el('hybCap1').value);
+  const hybCap2m      = parseFloat(el('hybCap2').value);
+  const hybCap3m      = parseFloat(el('hybCap3').value);
+  const hybExpY       = parseInt(el('hybExpY').value);
+  const hybTailPct    = parseFloat(el('hybTail').value)    / 100;
+  const perVentureInv = spY > 0 ? invY / spY : invY;               // $M invested per venture
+  // Reused by Dividend and Hybrid (Founder Earnings base)
+  const divMargin     = parseFloat(el('divMargin').value)  / 100;
 
   // Update displayed values
   el('spYo').textContent   = spY % 1 === 0 ? spY : spY.toFixed(1);
@@ -578,12 +677,27 @@ function calc() {
   el('divMargino').textContent = parseFloat(el('divMargin').value) + '%';
   el('divPayouto').textContent = parseFloat(el('divPayout').value) + '%';
 
+  // Hybrid slider display values
+  el('hybUpfronto').textContent = parseFloat(el('hybUpfront').value) + '%';
+  el('hybFCo').textContent      = parseFloat(el('hybFC').value).toFixed(1) + '%';
+  el('hybRateo').textContent    = parseFloat(el('hybRate').value) + '%';
+  el('hybGraceo').textContent   = parseFloat(el('hybGrace').value) + ' mo';
+  el('hybCap1o').textContent    = parseFloat(el('hybCap1').value).toFixed(1) + 'x';
+  el('hybCap2o').textContent    = parseFloat(el('hybCap2').value).toFixed(1) + 'x';
+  el('hybCap3o').textContent    = parseFloat(el('hybCap3').value).toFixed(1) + 'x';
+  el('hybExpYo').textContent    = 'Y' + parseInt(el('hybExpY').value);
+  el('hybTailo').textContent    = parseInt(el('hybTail').value) + '%';
+
   // Update metric label names based on mode
-  const term = modelMode === 'royalty' ? 'royalty' : 'dividend';
-  el('m1label').textContent = 'Annual ' + term + ' income (steady state)';
+  const term = modelMode === 'royalty' ? 'royalty' : modelMode === 'dividend' ? 'dividend' : 'cash';
+  el('m1label').textContent = modelMode === 'hybrid'
+    ? 'Peak annual cash to Thrive'
+    : 'Annual ' + term + ' income (steady state)';
   el('m2label').textContent = 'Cumulative ' + term + ' (10 yr)';
   el('m4label').textContent = 'Total return (' + term + ' + equity)';
-  el('returnStructureTitle').textContent = modelMode === 'royalty' ? 'Royalty structure' : 'Dividend structure';
+  el('returnStructureTitle').textContent = modelMode === 'royalty' ? 'Royalty structure'
+    : modelMode === 'dividend' ? 'Dividend structure'
+    : 'Hybrid (term sheet) structure';
 
   // Simulation
   const totalV = spY * yrs;
@@ -611,11 +725,13 @@ function calc() {
   let avgRoyPerVenture;
   if (modelMode === 'royalty') {
     avgRoyPerVenture = sampleTotalRoy / SAMPLE_SIZE;
-  } else {
+  } else if (modelMode === 'dividend') {
     const divOwn    = parseFloat(el('divOwn').value) / 100;
-    const divMargin = parseFloat(el('divMargin').value) / 100;
     const divPayout = parseFloat(el('divPayout').value) / 100;
     avgRoyPerVenture = avgRevPerVenture * divMargin * divPayout * divOwn;
+  } else {
+    // Hybrid: per-cohort, time-tiered cap — no closed-form average. Cash is computed in the year loop.
+    avgRoyPerVenture = 0;
   }
   const annualRoy = avgRoyPerVenture * survivors;
 
@@ -636,43 +752,100 @@ function calc() {
   el('distDesc').textContent = 'Simulated: ' + distParts.join(', ');
 
   // Equity
-  let effEq = eqT;
-  if (antiD === 'none')     effEq = eqT * (1 - dilP);
-  else if (antiD === 'A')   effEq = eqT * (1 - dilP * 0.5);
-  else                      effEq = eqT * (1 - dilP * 0.25);
+  const dilFactor = antiD === 'none' ? 1 : antiD === 'A' ? 0.5 : 0.25;
+  let effEq = eqT * (1 - dilP * dilFactor);
+
+  // Hybrid: pre-redemption equity = upfront × (1 - dilution); post-redemption = residual tail × (1 - dilution).
+  // 'expired' cohorts (option ran out without redemption) keep upfront equity.
+  const effEqUpfront = hybUpfrontPct * (1 - dilP * dilFactor);
+  const effEqTail    = hybTailPct    * (1 - dilP * dilFactor);
 
   const liqVentures = Math.round(totalV * liqP);
-  const eqValue = liqVentures * exitV * effEq;
 
   // 10-year cumulative curves
   const horizonYrs = 10;
   const cumRoyalties = [], cumInvestment = [], equityByYear = [], unrealizedEqByYear = [], totalByYear = [];
   const cohortSurvivors = survivors / yrs;
-  let cumR = 0, cumExits = 0, cumSS = 0, cumBilledTotal = 0;
+  let cumR = 0, cumExits = 0, cumExitsActive = 0, cumExitsRedeemed = 0, cumSS = 0, cumBilledTotal = 0;
   const ssAnnualBilled = [], ssAnnualNet = [], ssCumNet = [], ssCumBilled = [];
   const annualRoyalties = [], activeCompaniesArr = [];
+
+  // Hybrid per-cohort state: cumulative cash paid to Thrive per representative venture, plus status.
+  // Cap target rises tier-by-tier with age (1.5x→2x→3x). Within a tier, payments stop when the
+  // tier ceiling is hit and resume next tier. Permanent redemption (equity stepdown) only triggers
+  // when the final/max cap is reached. Option expires after hybExpY years if not yet redeemed.
+  const cohortCumPaid = new Array(yrs).fill(0);
+  const cohortStatus  = new Array(yrs).fill('active');  // 'active' | 'redeemed' | 'expired'
+  const hybFinalCap = Math.max(hybCap1m, hybCap2m, hybCap3m) * perVentureInv;
+  function capTargetForAge(age) {
+    const mult = age <= 3 ? hybCap1m : age <= 5 ? hybCap2m : hybCap3m;
+    return mult * perVentureInv;
+  }
+
   for (let y = 1; y <= horizonYrs; y++) {
     let yRoy = 0, portfolioVal = 0, exitsThisYear = 0;
+    let portfolioValActive = 0, portfolioValRedeemed = 0;
+    let exitsActiveThisYear = 0, exitsRedeemedThisYear = 0;
     // Count active survivors this year (all cohorts created so far that survived)
     const activeCompanies = Math.min(y, yrs) * cohortSurvivors;
     activeCompaniesArr.push(Math.round(activeCompanies * 10) / 10);
 
     for (let c = 1; c <= Math.min(y, yrs); c++) {
       const age        = y - c + 1;
+      const cohortIdx  = c - 1;
       const ramp       = rampFn(age, matY, rampMode);
       const postGrowth = age > matY ? Math.pow(1 + growthR, age - matY) : 1;
-      if (modelMode === 'dividend') {
-        // margin ramps to target at maturity then plateaus; revenue still grows post-maturity
-        const marginRamp = Math.pow(Math.min((age - 1) / Math.max(matY - 1, 1), 1), 1/3);
-        yRoy += avgRoyPerVenture * cohortSurvivors * ramp * postGrowth * marginRamp;
+      const cohortRev  = avgRevPerVenture * cohortSurvivors * ramp * postGrowth;
+      const exitsCohortY = (age >= exitMinY && age <= exitMaxY) ? cohortSurvivors * liqP / windowLen : 0;
+
+      if (modelMode === 'hybrid') {
+        // Option expiration — terminates after Y8 (default) without redemption; equity stays at upfront.
+        if (cohortStatus[cohortIdx] === 'active' && age > hybExpY) {
+          cohortStatus[cohortIdx] = 'expired';
+        }
+        // Cash payment if the option is still active and we're past the grace period.
+        if (cohortStatus[cohortIdx] === 'active' && age * 12 > hybGraceMo) {
+          const marginRamp = Math.pow(Math.min((age - 1) / Math.max(matY - 1, 1), 1), 1/3);
+          // Founder Earnings = revenue × (margin × ramp + founder comp add-back)
+          const fePerVenture = avgRevPerVenture * ramp * postGrowth * (divMargin * marginRamp + hybFCpct);
+          let payment = Math.max(0, fePerVenture * hybRatePct);
+          // Clip to current tier ceiling. The tier rises with age (Y1–3 → Y4–5 → Y6–8) so a cohort
+          // that hits the lower tier's cap simply stops paying until the next tier opens.
+          const capTarget = capTargetForAge(age);
+          const remaining = Math.max(0, capTarget - cohortCumPaid[cohortIdx]);
+          payment = Math.min(payment, remaining);
+          cohortCumPaid[cohortIdx] += payment;
+          yRoy += payment * cohortSurvivors;
+          // Redeem (permanent equity stepdown) only when the final/max cap is reached.
+          if (cohortCumPaid[cohortIdx] >= hybFinalCap - 1e-9) {
+            cohortStatus[cohortIdx] = 'redeemed';
+          }
+        }
+        // Portfolio value & exits split by current redemption status
+        const cohortPVal = cohortRev * revMult;
+        if (cohortStatus[cohortIdx] === 'redeemed') {
+          portfolioValRedeemed  += cohortPVal;
+          exitsRedeemedThisYear += exitsCohortY;
+        } else {
+          portfolioValActive    += cohortPVal;
+          exitsActiveThisYear   += exitsCohortY;
+        }
       } else {
-        yRoy += avgRoyPerVenture * cohortSurvivors * ramp * postGrowth;
+        if (modelMode === 'dividend') {
+          // margin ramps to target at maturity then plateaus; revenue still grows post-maturity
+          const marginRamp = Math.pow(Math.min((age - 1) / Math.max(matY - 1, 1), 1), 1/3);
+          yRoy += avgRoyPerVenture * cohortSurvivors * ramp * postGrowth * marginRamp;
+        } else {
+          yRoy += avgRoyPerVenture * cohortSurvivors * ramp * postGrowth;
+        }
+        portfolioVal += cohortRev * revMult;
+        exitsThisYear += exitsCohortY;
       }
-      portfolioVal += avgRevPerVenture * cohortSurvivors * ramp * postGrowth * revMult;
-      if (age >= exitMinY && age <= exitMaxY) exitsThisYear += cohortSurvivors * liqP / windowLen;
     }
-    cumR     += yRoy;
-    cumExits += exitsThisYear;
+    cumR             += yRoy;
+    cumExits         += exitsThisYear;
+    cumExitsActive   += exitsActiveThisYear;
+    cumExitsRedeemed += exitsRedeemedThisYear;
     annualRoyalties.push(yRoy);
 
     // Shared services
@@ -700,8 +873,14 @@ function calc() {
     ssCumNet.push(Math.round(cumSS * 100) / 100);
     ssCumBilled.push(Math.round(cumBilledTotal * 100) / 100);
 
-    const eqAtY           = Math.round(cumExits * exitV * effEq * 10) / 10;
-    const unrealizedEqAtY = Math.round(portfolioVal * effEq * 10) / 10;
+    let eqAtY, unrealizedEqAtY;
+    if (modelMode === 'hybrid') {
+      eqAtY           = Math.round((cumExitsActive * exitV * effEqUpfront + cumExitsRedeemed * exitV * effEqTail) * 10) / 10;
+      unrealizedEqAtY = Math.round((portfolioValActive * effEqUpfront + portfolioValRedeemed * effEqTail) * 10) / 10;
+    } else {
+      eqAtY           = Math.round(cumExits * exitV * effEq * 10) / 10;
+      unrealizedEqAtY = Math.round(portfolioVal * effEq * 10) / 10;
+    }
     const grossInv  = Math.min(y, yrs) * invY;
     const cumBilledY = ssAnnualBilled.reduce((a, b) => a + b, 0);  // sum so far (built incrementally)
     const deduct    = ssSubtract === 'net' ? cumSS : ssSubtract === 'billed' ? cumBilledY : 0;
@@ -715,7 +894,14 @@ function calc() {
   }
 
   _eqRealized        = equityByYear[horizonYrs - 1];
-  _eqAllTime         = liqVentures * exitV * effEq;
+  if (modelMode === 'hybrid') {
+    // Blend upfront vs. tail equity by the share of cohorts redeemed at horizon end
+    const redeemedFrac = cohortStatus.filter(s => s === 'redeemed').length / Math.max(yrs, 1);
+    const blendedEff   = redeemedFrac * effEqTail + (1 - redeemedFrac) * effEqUpfront;
+    _eqAllTime         = liqVentures * exitV * blendedEff;
+  } else {
+    _eqAllTime         = liqVentures * exitV * effEq;
+  }
   _cumRoyalties      = cumRoyalties;
   _equityByYear      = equityByYear;
   _cumInvestment     = cumInvestment;
@@ -729,7 +915,9 @@ function calc() {
   _activeCompaniesArr = activeCompaniesArr;
 
   // Metrics
-  el('m1').textContent = '$' + annualRoy.toFixed(1) + 'M/yr';
+  // Hybrid: cash flow profile peaks then drops (cap-driven), so show peak/yr instead of steady state.
+  const m1Val = modelMode === 'hybrid' ? Math.max(0, ...annualRoyalties) : annualRoy;
+  el('m1').textContent = '$' + m1Val.toFixed(1) + 'M/yr';
   el('m2').textContent = '$' + cumRoyalties[horizonYrs - 1].toFixed(1) + 'M';
   updateEqCards();
 
@@ -740,7 +928,7 @@ function calc() {
   el('ss3').textContent = fmtM(ssCumNet[horizonYrs - 1]);
 
   // Hypotheses
-  let returnDesc;
+  let returnDesc, equityDesc;
   if (modelMode === 'royalty') {
     const royDesc = mode === 'flat'
       ? parseFloat(el('flatR').value) + '% flat'
@@ -748,8 +936,19 @@ function calc() {
       ? 'graduated (' + parseFloat(el('g1r').value) + '/' + parseFloat(el('g2r').value) + '/' + parseFloat(el('g3r').value) + '%)'
       : 'capped at $' + capMaxM.toFixed(1) + 'M';
     returnDesc = '<div class="hyp-item"><b>Royalty:</b> ' + royDesc + ', kicks in at $' + Math.round(parseFloat(el('thresh').value)) + 'K</div>';
-  } else {
+    equityDesc = '<div class="hyp-item"><b>Equity:</b> ' + Math.round(eqT * 100) + '% Thrive + ' + Math.round(eqO * 100) + '% OTC, anti-dilution through ' + antiD + '</div>';
+  } else if (modelMode === 'dividend') {
     returnDesc = '<div class="hyp-item"><b>Dividend:</b> ' + parseFloat(el('divOwn').value) + '% ownership · ' + parseFloat(el('divMargin').value) + '% margin at maturity (ramps with revenue) · ' + parseFloat(el('divPayout').value) + '% payout</div>';
+    equityDesc = '<div class="hyp-item"><b>Equity:</b> ' + Math.round(eqT * 100) + '% Thrive + ' + Math.round(eqO * 100) + '% OTC, anti-dilution through ' + antiD + '</div>';
+  } else {
+    const redeemedNow = cohortStatus.filter(s => s === 'redeemed').length;
+    const expiredNow  = cohortStatus.filter(s => s === 'expired').length;
+    returnDesc =
+      '<div class="hyp-item"><b>Hybrid cash:</b> ' + parseFloat(el('hybRate').value) + '% of Founder Earnings (margin + ' + parseFloat(el('hybFC').value).toFixed(1) + '% founder comp), ' + parseFloat(el('hybGrace').value) + ' mo grace</div>' +
+      '<div class="hyp-item"><b>Cap:</b> ' + hybCap1m.toFixed(1) + 'x (Y1–3) → ' + hybCap2m.toFixed(1) + 'x (Y4–5) → ' + hybCap3m.toFixed(1) + 'x (Y6–8) on $' + (perVentureInv * 1000).toFixed(0) + 'K/venture; expires after Y' + hybExpY + '</div>' +
+      '<div class="hyp-item"><b>By Y10:</b> ' + redeemedNow + ' / ' + yrs + ' cohorts redeemed (equity steps to ' + Math.round(hybTailPct * 100) + '%), ' + expiredNow + ' expired w/ upfront equity</div>';
+    equityDesc =
+      '<div class="hyp-item"><b>Equity:</b> ' + Math.round(hybUpfrontPct * 100) + '% upfront → ' + Math.round(hybTailPct * 100) + '% tail post-redemption · ' + Math.round(eqO * 100) + '% OTC · anti-dilution through ' + antiD + '</div>';
   }
 
   let hyp = '';
@@ -759,7 +958,7 @@ function calc() {
   hyp += '<div class="hyp-item"><b>$' + medR.toFixed(1) + 'M</b> median mature revenue, spread ' + sigma.toFixed(1) + '</div>';
   hyp += '<div class="hyp-item"><b>' + matY + ' yrs</b> from spin-out to revenue maturity</div>';
   hyp += returnDesc;
-  hyp += '<div class="hyp-item"><b>Equity:</b> ' + Math.round(eqT * 100) + '% Thrive + ' + Math.round(eqO * 100) + '% OTC, anti-dilution through ' + antiD + '</div>';
+  hyp += equityDesc;
   hyp += '<div class="hyp-item"><b>' + Math.round(liqP * 100) + '%</b> of ventures exit between yr ' + exitMinY + '–' + exitMaxY + ' at ~$' + Math.round(exitV) + 'M avg</div>';
   el('hypBox').innerHTML = '<div style="font-size:14px;font-weight:500;margin:0 0 8px;color:var(--color-text-primary);">Current hypotheses</div>' + hyp;
 
@@ -808,15 +1007,18 @@ function setModelMode(mode) {
   modelMode = mode;
   el('royaltyContent').style.display  = mode === 'royalty'  ? '' : 'none';
   el('dividendContent').style.display = mode === 'dividend' ? '' : 'none';
-  el('modeRoyaltyBtn').classList.toggle('active', mode === 'royalty');
+  el('hybridContent').style.display   = mode === 'hybrid'   ? '' : 'none';
+  el('modeRoyaltyBtn').classList.toggle('active',  mode === 'royalty');
   el('modeDividendBtn').classList.toggle('active', mode === 'dividend');
-  // Grey out Thrive equity row in dividend mode (linked to ownership slider)
+  el('modeHybridBtn').classList.toggle('active',   mode === 'hybrid');
+  // Grey out the standalone Thrive equity row when it's overridden by another mode (dividend = ownership; hybrid = upfront equity)
   const eqTRow = el('eqTRow');
   if (eqTRow) {
-    eqTRow.style.opacity = mode === 'dividend' ? 0.4 : 1;
-    eqTRow.style.pointerEvents = mode === 'dividend' ? 'none' : '';
+    const linked = mode === 'dividend' || mode === 'hybrid';
+    eqTRow.style.opacity = linked ? 0.4 : 1;
+    eqTRow.style.pointerEvents = linked ? 'none' : '';
   }
-  // Show ⓘ info button only in dividend mode
+  // Show ⓘ dividend info button only in dividend mode
   const divInfoBtn = el('divInfoBtn');
   if (divInfoBtn) divInfoBtn.style.display = mode === 'dividend' ? '' : 'none';
   calc();
@@ -915,7 +1117,9 @@ function updateYearSnapshot() {
   // Active companies: show as integer range (e.g. 1.6 → "1 – 2")
   const acLow = Math.floor(activeC), acHigh = Math.ceil(activeC);
   el('snapActiveC').textContent = acLow === acHigh ? acLow : acLow + ' – ' + acHigh;
-  el('snapRoyLabel').textContent = modelMode === 'royalty' ? 'Annual royalty' : 'Annual dividend';
+  el('snapRoyLabel').textContent = modelMode === 'royalty' ? 'Annual royalty'
+    : modelMode === 'hybrid' ? 'Annual cash to Thrive'
+    : 'Annual dividend';
   el('snapAnnualRoy').innerHTML = fmtM(annualRoy) + '<div style="font-size:12px;font-weight:400;color:var(--color-text-secondary);margin-top:2px;">Cum: ' + fmtM(cumRoy) + '</div>';
   el('snapSSNet').innerHTML     = fmtM(ssAnnNet) + ' <span style="font-size:13px;font-weight:400;color:var(--color-text-secondary);">of ' + fmtM(ssAnnBilled) + ' billed</span>' + '<div style="font-size:12px;font-weight:400;color:var(--color-text-secondary);margin-top:2px;">Cum: ' + fmtM(ssCumNet) + '</div>';
   // Net burn: red when spending down reserves, green when self-sustaining this year
@@ -1033,9 +1237,9 @@ function calcRunway() {
   el('runwayCrossover').textContent = crossover !== null ? 'Yr ' + crossover : 'Beyond yr 10';
   el('runwayCrossover').style.color = withinRunway ? 'var(--color-text-success)' : 'var(--color-text-danger)';
 
-  const term = modelMode === 'royalty' ? 'royalty' : 'dividend';
-  el('runwayRoyLabel').textContent      = 'Cumulative ' + term + ' at end';
-  el('runwayAnnualRoyLabel').textContent = 'Annual ' + term + ' run rate at end';
+  const termRw = modelMode === 'royalty' ? 'royalty' : modelMode === 'dividend' ? 'dividend' : 'cash';
+  el('runwayRoyLabel').textContent      = 'Cumulative ' + termRw + ' at end';
+  el('runwayAnnualRoyLabel').textContent = 'Annual ' + termRw + ' run rate at end';
 }
 
 ids.forEach(id => { const e = el(id); if (e) e.addEventListener('input', calc); });

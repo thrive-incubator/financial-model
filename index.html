@@ -30,10 +30,18 @@
     </span>
   </div>
 
-  <div style="display:flex;gap:8px;margin:0 0 1.5rem;align-items:center;">
+  <div style="display:flex;gap:8px;margin:0 0 1.5rem;align-items:center;flex-wrap:wrap;">
     <span style="font-size:13px;color:var(--color-text-secondary);">Return model:</span>
-    <button id="modeRoyaltyBtn" class="preset-btn" onclick="setModelMode('royalty')" style="padding:4px 10px;font-size:12px;">Royalty</button>
+    <button id="modeRoyaltyBtn"  class="preset-btn"        onclick="setModelMode('royalty')"  style="padding:4px 10px;font-size:12px;">Royalty</button>
     <button id="modeDividendBtn" class="preset-btn active" onclick="setModelMode('dividend')" style="padding:4px 10px;font-size:12px;">Dividend</button>
+    <button id="modeHybridBtn"   class="preset-btn"        onclick="setModelMode('hybrid')"   style="padding:4px 10px;font-size:12px;">Hybrid (term sheet)</button>
+    <span class="info-icon" tabindex="0">ⓘ
+      <span class="info-tooltip">
+        <b>Royalty</b> — % of gross revenue above a threshold.<br>
+        <b>Dividend</b> — % of profit (margin × payout) by ownership stake.<br>
+        <b>Hybrid</b> — Cash payments on Founder Earnings (Net Income + Founder Comp) with a time-tiered return cap. Equity steps down from upfront % to a residual tail when the cap is reached.
+      </span>
+    </span>
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 1.5rem;" id="metrics">
@@ -209,6 +217,22 @@
       <div class="row"><span class="lbl">Profit margin at maturity (%)</span><input type="range" min="10" max="80" step="5" value="40" id="divMargin" style="flex:1;"><span class="val" id="divMargino">40%</span></div>
       <div class="row"><span class="lbl">Dividend payout ratio (%)</span><input type="range" min="20" max="100" step="5" value="60" id="divPayout" style="flex:1;"><span class="val" id="divPayouto">60%</span></div>
     </div>
+
+    <!-- Hybrid parameters (shown in hybrid mode) -->
+    <div id="hybridContent" style="display:none;">
+      <div style="font-size:12px;color:var(--color-text-secondary);margin:0 0 10px;line-height:1.5;">
+        Cash payments are <b>% of Founder Earnings</b> (margin + founder comp add-back) per year, after a grace period. A time-tiered cap on cumulative payments redeems the option; equity steps down from the upfront % to a residual tail. Reuses <b>Profit margin at maturity</b> from above.
+      </div>
+      <div class="row"><span class="lbl">Upfront equity (%)</span><input type="range" min="10" max="50" step="1" value="30" id="hybUpfront" style="flex:1;"><span class="val" id="hybUpfronto">30%</span></div>
+      <div class="row"><span class="lbl">Founder comp add-back (% rev)</span><input type="range" min="0" max="20" step="0.5" value="7.5" id="hybFC" style="flex:1;"><span class="val" id="hybFCo">7.5%</span></div>
+      <div class="row"><span class="lbl">Payment rate (% Founder Earnings)</span><input type="range" min="5" max="40" step="1" value="22" id="hybRate" style="flex:1;"><span class="val" id="hybRateo">22%</span></div>
+      <div class="row"><span class="lbl">Grace period (months)</span><input type="range" min="0" max="36" step="3" value="21" id="hybGrace" style="flex:1;"><span class="val" id="hybGraceo">21 mo</span></div>
+      <div class="row"><span class="lbl">Cap multiplier · Y1–3</span><input type="range" min="1" max="3" step="0.1" value="1.5" id="hybCap1" style="flex:1;"><span class="val" id="hybCap1o">1.5x</span></div>
+      <div class="row"><span class="lbl">Cap multiplier · Y4–5</span><input type="range" min="1" max="4" step="0.1" value="2.0" id="hybCap2" style="flex:1;"><span class="val" id="hybCap2o">2.0x</span></div>
+      <div class="row"><span class="lbl">Cap multiplier · Y6–8</span><input type="range" min="1" max="6" step="0.1" value="3.0" id="hybCap3" style="flex:1;"><span class="val" id="hybCap3o">3.0x</span></div>
+      <div class="row"><span class="lbl">Option expires after year</span><input type="range" min="5" max="12" step="1" value="8" id="hybExpY" style="flex:1;"><span class="val" id="hybExpYo">Y8</span></div>
+      <div class="row"><span class="lbl">Residual equity tail (%)</span><input type="range" min="0" max="20" step="1" value="10" id="hybTail" style="flex:1;"><span class="val" id="hybTailo">10%</span></div>
+    </div>
   </div>
 
   <div class="sec">
@@ -340,6 +364,26 @@
       <div class="lim-card">
         <div class="lim-title">Advanced deal terms not modeled</div>
         <div class="lim-body">Several common incubator mechanisms are excluded from this model: <b>royalty buyout</b> (company pays a lump sum to exit the royalty obligation); <b>royalty-to-equity conversion</b> (accumulated royalties convert to additional equity at a milestone); <b>pro-rata rights</b> (Thrive's right to invest in future rounds to maintain its equity stake). These terms can significantly change returns and should be explored in later-stage term sheet design.</div>
+      </div>
+
+      <div class="lim-card lim-open">
+        <div class="lim-title">Hybrid: priced-round conversion not modeled</div>
+        <div class="lim-body">Per the term-sheet design, a priced round terminates Thrive's redemption option and converts to a standard 30% equity position with anti-dilution protection. The current Hybrid model assumes no priced rounds occur; in reality some venture fraction will raise priced rounds (typically by Y3–4) and exit the cap mechanism early. This understates equity returns for fundable ventures and overstates cash returns.</div>
+      </div>
+
+      <div class="lim-card lim-open">
+        <div class="lim-title">Hybrid: mission-breach acceleration not modeled</div>
+        <div class="lim-body">The mission covenant (accelerated redemption + Thrive board consent if a company reorganizes away from children's mental health) is not quantified. Treated as a contractual safeguard with no expected-value impact in the base case. Could be modeled as a low-probability event triggering a lump-sum cap payment.</div>
+      </div>
+
+      <div class="lim-card">
+        <div class="lim-title">Hybrid: dividend netting deferred</div>
+        <div class="lim-body">In the term sheet, dividends paid to Thrive count toward the cap (no double-dip). The Hybrid mode subsumes all cash flows into the Founder-Earnings × payment-rate stream, so there is no separate dividend stream to net. If a future version layers explicit dividends on top of Hybrid (or pre-cap dividends in years past Y8), netting will need to be wired in.</div>
+      </div>
+
+      <div class="lim-card">
+        <div class="lim-title">Hybrid: single representative venture per cohort</div>
+        <div class="lim-body">Each yearly cohort is simulated as one representative venture at the median revenue path. This means all ventures in a cohort hit the cap at the same time (or never), missing the within-cohort variance where high-revenue ventures redeem fast and low-revenue ones never redeem. Aggregate cash and equity are roughly correct but the redemption timing distribution is artificially tight.</div>
       </div>
 
     </div>
