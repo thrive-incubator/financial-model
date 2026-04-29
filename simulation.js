@@ -1,5 +1,7 @@
+// 400+ uniform seeds so 200 boxMuller(i) calls (each consuming 2 seeds) get
+// 200 unique pairs. Sized 2× the largest SAMPLE_SIZE used by callers.
 const SEED_RANDOMS = [];
-for (let i = 0; i < 200; i++) {
+for (let i = 0; i < 400; i++) {
   let s = i * 2654435761 >>> 0;
   s = ((s >>> 16) ^ s) * 0x45d9f3b;
   s = ((s >>> 16) ^ s) * 0x45d9f3b;
@@ -8,7 +10,9 @@ for (let i = 0; i < 200; i++) {
 }
 
 function boxMuller(i) {
-  const u1 = SEED_RANDOMS[i * 2 % 200], u2 = SEED_RANDOMS[(i * 2 + 1) % 200];
+  const N = SEED_RANDOMS.length;
+  const u1 = SEED_RANDOMS[(i * 2)     % N];
+  const u2 = SEED_RANDOMS[(i * 2 + 1) % N];
   return Math.sqrt(-2 * Math.log(u1 + 0.001)) * Math.cos(2 * Math.PI * u2);
 }
 
@@ -599,13 +603,14 @@ function calc() {
   const matY   = parseInt(el('matY').value);
   const mode   = el('royMode').value;
   // Equity stake is overridden in dividend mode (= ownership) and hybrid mode (= upfront equity).
+  // We don't write the override back to the eqT slider — doing so would pollute the user's
+  // royalty-mode setting and leak across mode switches (the slider would carry the override
+  // back with it). The greyed-out row's `eqTo` text label still reflects the effective value.
   let eqT = parseInt(el('eqT').value) / 100;
   if (modelMode === 'dividend') {
     eqT = parseFloat(el('divOwn').value) / 100;
-    el('eqT').value = Math.round(eqT * 100);
   } else if (modelMode === 'hybrid') {
     eqT = parseFloat(el('hybUpfront').value) / 100;
-    el('eqT').value = Math.round(eqT * 100);
   }
   const eqO    = parseInt(el('eqO').value) / 100;
   const dilP   = parseInt(el('dil').value) / 100;
